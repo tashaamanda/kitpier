@@ -24,7 +24,7 @@ function dailyCap() {
 }
 
 /** Tx1. Lock order: platform day → user balance → project (fixed, so no deadlocks). */
-export async function reserveTurn(s: Scope, conversationId: string, platformMicros: number) {
+export async function reserveTurn(s: Scope, conversationId: string, platformMicros: number, amount = TURN_MAX_MICROS) {
   const day = today();
   return tx(async (c) => {
     await c.query("INSERT INTO platform_daily_spend (day) VALUES ($1) ON CONFLICT DO NOTHING", [day]);
@@ -47,7 +47,7 @@ export async function reserveTurn(s: Scope, conversationId: string, platformMicr
     if (!project) throw new HttpError(404, "Not found");
     const exhausted = () => new HttpError(402, "Online booking is paused for this business right now.", "budget_exhausted");
     if (project.frozen) throw exhausted();
-    if ((await spendable(c, s.userId)) < TURN_MAX_MICROS) throw exhausted();
+    if ((await spendable(c, s.userId)) < amount) throw exhausted();
 
     // Project spend = posted usage debits + what open reservations could still charge.
     const spent = await one<{ month: number; day: number }>(
@@ -61,14 +61,14 @@ export async function reserveTurn(s: Scope, conversationId: string, platformMicr
           + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS day`,
       [s.projectId],
     );
-    if (project.budget_micros != null && (spent?.month ?? 0) + TURN_MAX_MICROS > project.budget_micros) throw exhausted();
-    if ((spent?.day ?? 0) + TURN_MAX_MICROS > project.daily_cap_micros) throw exhausted();
+    if (project.budget_micros != null && (spent?.month ?? 0) + amount > project.budget_micros) throw exhausted();
+    if ((spent?.day ?? 0) + amount > project.daily_cap_micros) throw exhausted();
 
     const id = newId("res");
     await c.query(
       `INSERT INTO reservations (id, user_id, project_id, day, amount_micros, expires_at, platform_reserved_micros, conversation_id)
        VALUES ($1, $2, $3, $4, $5, now() + interval '120 seconds', $6, $7)`,
-      [id, s.userId, s.projectId, day, TURN_MAX_MICROS, platformMicros, conversationId],
+      [id, s.userId, s.projectId, day, amount, platformMicros, conversationId],
     );
     await c.query("UPDATE platform_daily_spend SET reserved_micros = reserved_micros + $2 WHERE day = $1", [day, platformMicros]);
     return { id, platformReserved: platformMicros };
@@ -86,8 +86,13 @@ export async function recordTurnUsage(reservationId: string, iteration: number, 
   return r?.c ?? 0;
 }
 
-export async function markBooked(reservationId: string) {
-  await pool.query("UPDATE reservations SET booked = true WHERE id = $1 AND state = 'open'", [reservationId]);
+/** Active-operation check before a booking write: false if the reservation already expired or settled. */
+export async function claimBooking(reservationId: string) {
+  return !!(await one(pool, "UPDATE reservations SET booked = true WHERE id = $1 AND state = 'open' RETURNING 1", [reservationId]));
+}
+
+export async function releaseBooking(reservationId: string) {
+  await pool.query("UPDATE reservations SET booked = false WHERE id = $1 AND state = 'open'", [reservationId]);
 }
 
 /** Tx2, exactly once (state guard + UNIQUE ledger source). */

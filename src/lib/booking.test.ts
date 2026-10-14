@@ -16,8 +16,9 @@ process.env.CREDENTIALS_MASTER_KEY = randomBytes(32).toString("base64");
 const { pool } = await import("./db");
 const { putCredential } = await import("./credentials");
 const { post, postedBalance } = await import("./ledger");
-const { bookingTurn } = await import("./booking");
-const { reserveTurn, settleTurn, TURN_MAX_MICROS } = await import("./billing");
+const { bookingTurn, confirmBooking } = await import("./booking");
+const { zonedToUtc } = await import("./slots");
+const { claimBooking, reserveTurn, settleTurn, TURN_MAX_MICROS } = await import("./billing");
 
 const A = { userId: "usr_a", projectId: "prj_a" };
 const B = { userId: "usr_b", projectId: "prj_b" };
@@ -27,7 +28,7 @@ const msg = (text: string) => ({ content: [{ type: "text", text }], stop_reason:
 const run = (tools: Tool[], name: string, input: unknown) => tools.find((t) => t.name === name)!.run(input);
 
 // Fake Supabase REST for the managed bookings table.
-let rows: { starts_at: string; name: string }[] = [];
+let rows: { starts_at: string; name: string; contact?: string }[] = [];
 function supabase(url: string, init?: RequestInit) {
   const u = new URL(url);
   if (!u.hostname.startsWith(REF)) return Promise.resolve(new Response("{}", { status: 404 }));
@@ -37,7 +38,10 @@ function supabase(url: string, init?: RequestInit) {
     rows.push(row);
     return Promise.resolve(new Response(null, { status: 201 }));
   }
-  return Promise.resolve(new Response(JSON.stringify(rows.map((r) => ({ starts_at: r.starts_at }))), { status: 200 }));
+  // Honour eq. filters (exists check); range filters are left to the slot logic.
+  const eq = [...u.searchParams].filter(([, v]) => v.startsWith("eq.")).map(([k, v]) => [k, v.slice(3)] as const);
+  const match = rows.filter((r) => eq.every(([k, v]) => (k === "starts_at" ? Date.parse(r.starts_at) === Date.parse(v) : (r as Record<string, unknown>)[k] === v)));
+  return Promise.resolve(new Response(JSON.stringify(match.map((r) => ({ starts_at: r.starts_at }))), { status: 200 }));
 }
 
 // A future Tuesday, in the window the slot rules allow.
@@ -49,7 +53,7 @@ function nextTuesday() {
 
 beforeEach(async () => {
   await pool.query(
-    "TRUNCATE conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
+    "TRUNCATE turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
   );
   for (const s of [A, B]) {
     await pool.query("INSERT INTO users (id, email, name, password_hash) VALUES ($1, $1, $1, 'x')", [s.userId]);
@@ -65,50 +69,111 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 afterAll(() => pool.end());
 
+let n = 0;
+const rid = () => `req_${++n}_${Date.now()}`;
+const turn = (text: string, conv: string | null = null, id = rid(), widget = "w_a") => bookingTurn(widget, conv, id, text, "1.1.1.1");
+const confirm = (conv: string, pendingId: string, id = rid()) => confirmBooking("w_a", conv, pendingId, id, "1.1.1.1");
+const propose = (date: string, time = "10:00") =>
+  async function* (tools: Tool[]) {
+    expect(await run(tools, "propose_booking", { name: "Sam (synthetic)", email: "Sam@Example.com", service: "haircut", date, time })).toMatch(/card is shown/);
+    yield msg("Please check the card and press Confirm.");
+  };
+
 describe("booking turn", () => {
-  it("a message costs $0.02; a booking adds $0.05 and lands in the business's Supabase", async () => {
-    script = async function* () {
-      yield msg("What would you like?");
+  it("the model can only propose; the customer's Confirm writes the booking ($0.02 per message, $0.05 per booking)", async () => {
+    const date = nextTuesday();
+    let names: string[] = [];
+    script = async function* (tools) {
+      names = tools.map((t) => t.name);
+      yield* propose(date)(tools);
     };
-    const t1 = await bookingTurn("w_a", null, "hi", "1.1.1.1");
+    const t1 = await turn("Haircut Tuesday 10am, Sam, sam@example.com");
+    expect(names.sort()).toEqual(["check_slots", "propose_booking"]); // no tool writes a booking
+    expect(rows).toHaveLength(0);
+    expect(t1.pending).toMatchObject({ service: "Haircut", time: "10:00", email: "sam@example.com" });
     expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000);
 
-    const date = nextTuesday();
-    script = async function* (tools) {
-      expect(await run(tools, "check_slots", { date })).toContain("10:00");
-      expect(await run(tools, "create_booking", { name: "Sam (synthetic)", email: "sam@example.com", service: "haircut", date, time: "10:00" })).toMatch(/^Booked/);
-      yield msg("You're booked!");
-    };
-    const t2 = await bookingTurn("w_a", t1.conversationId, "Yes, Tuesday 10am, Sam, sam@example.com", "1.1.1.1");
-    expect(t2.booked).toBe(true);
+    expect(await confirm(t1.conversationId, "pb_wrong")).toMatchObject({ booked: false });
+    expect(rows).toHaveLength(0);
+
+    const c = await confirm(t1.conversationId, t1.pending!.id);
+    expect(c.booked).toBe(true);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ name: "Sam (synthetic)", service: "Haircut" });
-    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000 - 70_000);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000 - 50_000);
 
     // After the booking the chat is over: fixed reply, no model call, no charge.
     script = async function* () {
       throw new Error("model must not be called");
     };
-    const t3 = await bookingTurn("w_a", t1.conversationId, "what shampoo?", "1.1.1.1");
-    expect(t3).toMatchObject({ booked: true });
-    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 90_000);
+    expect(await turn("what shampoo?", t1.conversationId)).toMatchObject({ booked: true });
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 70_000);
   });
 
-  it("one booking per conversation, taken slots refused, unknown services refused", async () => {
+  it("a retried message (same request id) returns the first result: one model call, one charge", async () => {
+    let calls = 0;
+    script = async function* () {
+      calls++;
+      yield msg("Hello!");
+    };
+    const id = rid();
+    const a = await turn("hi", null, id);
+    const b = await turn("hi", null, id);
+    expect(b).toEqual(a);
+    expect(calls).toBe(1);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000);
+  });
+
+  it("concurrent messages in one conversation run one at a time", async () => {
+    script = async function* () {
+      await new Promise((r) => setTimeout(r, 50));
+      yield msg("Hello!");
+    };
+    const first = await turn("hi");
+    const results = await Promise.allSettled([turn("a", first.conversationId), turn("b", first.conversationId), turn("c", first.conversationId)]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected").map((r) => (r as PromiseRejectedResult).reason.status)).toEqual([409, 409]);
+  });
+
+  it("concurrent or repeated Confirms make one booking and one charge", async () => {
     const date = nextTuesday();
-    script = async function* (tools) {
-      await run(tools, "create_booking", { name: "A", email: "a@example.com", service: "Haircut", date, time: "10:00" });
-      expect(await run(tools, "create_booking", { name: "A", email: "a@example.com", service: "Haircut", date, time: "11:00" })).toMatch(/already made a booking/);
-      yield msg("ok");
-    };
-    await bookingTurn("w_a", null, "book", "1.1.1.1");
-    script = async function* (tools) {
-      expect(await run(tools, "create_booking", { name: "B", email: "b@example.com", service: "Haircut", date, time: "10:00" })).toMatch(/not available/);
-      expect(await run(tools, "create_booking", { name: "B", email: "b@example.com", service: "Tattoo", date, time: "12:00" })).toMatch(/Unknown service/);
-      yield msg("ok");
-    };
-    await bookingTurn("w_a", null, "book", "2.2.2.2");
+    script = propose(date);
+    const t = await turn("book me");
+    const results = await Promise.allSettled([confirm(t.conversationId, t.pending!.id), confirm(t.conversationId, t.pending!.id), confirm(t.conversationId, t.pending!.id)]);
+    expect(results.filter((r) => r.status === "fulfilled" && r.value.booked)).toHaveLength(1);
+    expect(await confirm(t.conversationId, t.pending!.id)).toMatchObject({ booked: true, reply: "You're already booked." });
     expect(rows).toHaveLength(1);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000 - 50_000);
+  });
+
+  it("recovers when Supabase saved the booking but the response was lost", async () => {
+    const date = nextTuesday();
+    script = propose(date);
+    const t = await turn("book me");
+    // The insert reaches Supabase, then the connection drops before we hear back.
+    vi.mocked(fetch).mockImplementationOnce((u) => supabase(String(u))).mockImplementationOnce(async (u, init) => {
+      await supabase(String(u), init);
+      throw new TypeError("network lost");
+    });
+    await expect(confirm(t.conversationId, t.pending!.id)).rejects.toMatchObject({ status: 502 });
+    expect(rows).toHaveLength(1);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000); // not charged for an unconfirmed result
+
+    const again = await confirm(t.conversationId, t.pending!.id);
+    expect(again.booked).toBe(true);
+    expect(rows).toHaveLength(1); // found the saved row instead of inserting twice
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000 - 50_000);
+  });
+
+  it("a slot taken by someone else in the meantime is refused at Confirm", async () => {
+    const date = nextTuesday();
+    script = propose(date);
+    const t = await turn("book me");
+    rows.push({ starts_at: zonedToUtc(date, 10, TZ).toISOString(), name: "Other" });
+    const c = await confirm(t.conversationId, t.pending!.id);
+    expect(c.booked).toBe(false);
+    expect(c.reply).toMatch(/just took that time/);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000);
   });
 
   it("pauses gracefully with no credits: no model call, no charge", async () => {
@@ -118,7 +183,7 @@ describe("booking turn", () => {
       yield msg("x");
     };
     await pool.query("DELETE FROM ledger_entries");
-    const r = await bookingTurn("w_a", null, "hi", "1.1.1.1");
+    const r = await turn("hi");
     expect(r.paused).toBe(true);
     expect(called).toBe(false);
   });
@@ -129,7 +194,7 @@ describe("booking turn", () => {
     };
     await pool.query("INSERT INTO widgets (id, user_id, project_id, business_name, services, timezone) VALUES ('w_b', $1, $2, 'B', '[\"x\"]', $3)", [B.userId, B.projectId, TZ]);
     await pool.query("INSERT INTO conversations (id, widget_id) VALUES ('cv_b', 'w_b')");
-    const r = await bookingTurn("w_a", "cv_b", "hi", "1.1.1.1");
+    const r = await turn("hi", "cv_b");
     expect(r.conversationId).not.toBe("cv_b");
   });
 });
@@ -156,6 +221,12 @@ describe("billing", () => {
     await post(pool, { userId: A.userId, source: "capture:small", kind: "purchase", amountMicros: TURN_MAX_MICROS });
     const results = await Promise.allSettled(Array.from({ length: 20 }, () => reserveTurn(A, "cv", 1000)));
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  });
+
+  it("an expired or settled reservation can't start a booking write", async () => {
+    const r = await reserveTurn(A, "cv", 0);
+    await settleTurn(r.id);
+    expect(await claimBooking(r.id)).toBe(false);
   });
 
   it("expired reservations charge recorded usage only", async () => {

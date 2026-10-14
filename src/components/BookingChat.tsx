@@ -1,38 +1,63 @@
 "use client";
 
 import { useState } from "react";
-import { api } from "@/lib/client";
 
 type Msg = { role: "user" | "assistant"; body: string };
+type Pending = { id: string; name: string; email: string; service: string; date: string; time: string };
+type Result = { conversationId: string; reply: string; booked: boolean; paused?: boolean; pending?: Pending | null };
 
-// Hosted booking page. Calls same-origin /r/{id}/chat; no keys ever reach the browser. Text renders as text.
+/** POST with a request id; on a network failure, retry once with the same id (the server returns the first result). */
+async function call(path: string, payload: object): Promise<Result> {
+  const requestId = crypto.randomUUID();
+  const send = () =>
+    fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, requestId }) });
+  let res: Response;
+  try {
+    res = await send();
+  } catch {
+    await new Promise((r) => setTimeout(r, 1500));
+    res = await send();
+  }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? "Something went wrong. Please try again.");
+  return json as Result;
+}
+
+// Hosted booking page. Same-origin calls only; no keys ever reach the browser. Text renders as text.
+// The assistant can only prepare a booking; it is written when the customer presses Confirm.
 export default function BookingChat({ widgetId, business, services }: { widgetId: string; business: string; services: string[] }) {
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "assistant", body: `Hi! I can book you in at ${business}. What would you like, and when?` },
-  ]);
+  const [msgs, setMsgs] = useState<Msg[]>([{ role: "assistant", body: `Hi! I can book you in at ${business}. What would you like, and when?` }]);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
-  async function send(e: React.FormEvent) {
+  function apply(r: Result) {
+    setConversationId(r.conversationId);
+    setMsgs((m) => [...m, { role: "assistant", body: r.reply }]);
+    setPending(r.booked || r.paused ? null : (r.pending ?? null));
+    if (r.booked || r.paused) setDone(true);
+  }
+
+  async function run(fn: () => Promise<Result>) {
+    setBusy(true);
+    try {
+      apply(await fn());
+    } catch (err) {
+      setMsgs((m) => [...m, { role: "assistant", body: (err as Error).message }]);
+    }
+    setBusy(false);
+  }
+
+  function send(e: React.FormEvent) {
     e.preventDefault();
     const message = text.trim();
     if (!message) return;
     setMsgs((m) => [...m, { role: "user", body: message }]);
     setText("");
-    setBusy(true);
-    try {
-      const r = await api<{ conversationId: string; reply: string; booked: boolean; paused?: boolean }>(`/r/${widgetId}/chat`, {
-        body: { conversationId, message },
-      });
-      setConversationId(r.conversationId);
-      setMsgs((m) => [...m, { role: "assistant", body: r.reply }]);
-      if (r.booked || r.paused) setDone(true);
-    } catch (err) {
-      setMsgs((m) => [...m, { role: "assistant", body: (err as Error).message }]);
-    }
-    setBusy(false);
+    setPending(null);
+    run(() => call(`/r/${widgetId}/chat`, { conversationId, message }));
   }
 
   return (
@@ -53,7 +78,32 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
             </p>
           </li>
         ))}
-        {busy && <li className="text-sm text-muted">Typing…</li>}
+        {pending && (
+          <li className="space-y-2 rounded-2xl border border-accent bg-card p-4 text-sm">
+            <p className="font-semibold">Check your booking</p>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+              <dt className="text-muted">Service</dt>
+              <dd>{pending.service}</dd>
+              <dt className="text-muted">When</dt>
+              <dd>
+                {pending.date} at {pending.time}
+              </dd>
+              <dt className="text-muted">Name</dt>
+              <dd>{pending.name}</dd>
+              <dt className="text-muted">Email</dt>
+              <dd>{pending.email}</dd>
+            </dl>
+            <button
+              disabled={busy}
+              onClick={() => run(() => call(`/r/${widgetId}/confirm`, { conversationId, pendingId: pending.id }))}
+              className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+            >
+              Confirm booking
+            </button>
+            <p className="text-xs text-muted">Something wrong? Just type the change below.</p>
+          </li>
+        )}
+        {busy && <li className="text-sm text-muted">One moment…</li>}
       </ul>
       {!done ? (
         <form onSubmit={send} className="flex gap-2">
