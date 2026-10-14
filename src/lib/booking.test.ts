@@ -16,8 +16,9 @@ process.env.CREDENTIALS_MASTER_KEY = randomBytes(32).toString("base64");
 const { pool } = await import("./db");
 const { putCredential } = await import("./credentials");
 const { post, postedBalance } = await import("./ledger");
-const { bookingTurn, confirmBooking } = await import("./booking");
+const { bookingTurn, confirmBooking, requestBookingCode } = await import("./booking");
 const { zonedToUtc } = await import("./slots");
+const { verifyCode } = await import("./email");
 const { claimBooking, reserveTurn, settleTurn, TURN_MAX_MICROS } = await import("./billing");
 
 const A = { userId: "usr_a", projectId: "prj_a" };
@@ -29,8 +30,13 @@ const run = (tools: Tool[], name: string, input: unknown) => tools.find((t) => t
 
 // Fake Supabase REST for the managed bookings table.
 let rows: { starts_at: string; name: string; contact?: string }[] = [];
+let emails: { to: string[]; subject: string; text: string; html: string; from: string }[] = [];
 function supabase(url: string, init?: RequestInit) {
   const u = new URL(url);
+  if (u.hostname === "api.resend.com") {
+    emails.push(JSON.parse(String(init?.body)));
+    return Promise.resolve(new Response(JSON.stringify({ id: `em_${emails.length}` }), { status: 200 }));
+  }
   if (!u.hostname.startsWith(REF)) return Promise.resolve(new Response("{}", { status: 404 }));
   if (init?.method === "POST") {
     const row = JSON.parse(String(init.body));
@@ -53,7 +59,7 @@ function nextTuesday() {
 
 beforeEach(async () => {
   await pool.query(
-    "TRUNCATE turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
+    "TRUNCATE email_codes, email_sends, turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
   );
   for (const s of [A, B]) {
     await pool.query("INSERT INTO users (id, email, name, password_hash) VALUES ($1, $1, $1, 'x')", [s.userId]);
@@ -64,6 +70,7 @@ beforeEach(async () => {
   await pool.query("INSERT INTO widgets (id, user_id, project_id, business_name, services, timezone) VALUES ('w_a', $1, $2, 'Sam''s Barbershop', '[\"Haircut\",\"Beard trim\"]', $3)", [A.userId, A.projectId, TZ]);
   await post(pool, { userId: A.userId, source: "capture:test", kind: "purchase", amountMicros: 10_000_000 });
   rows = [];
+  emails = [];
   vi.stubGlobal("fetch", vi.fn(supabase));
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -72,7 +79,8 @@ afterAll(() => pool.end());
 let n = 0;
 const rid = () => `req_${++n}_${Date.now()}`;
 const turn = (text: string, conv: string | null = null, id = rid(), widget = "w_a") => bookingTurn(widget, conv, id, text, "1.1.1.1");
-const confirm = (conv: string, pendingId: string, id = rid()) => confirmBooking("w_a", conv, pendingId, id, "1.1.1.1");
+const confirm = (conv: string, pendingId: string, id = rid(), code?: string) => confirmBooking("w_a", conv, pendingId, id, "1.1.1.1", code);
+const lastCode = () => emails.at(-1)!.text.match(/\d{6}/)![0];
 const propose = (date: string, time = "10:00") =>
   async function* (tools: Tool[]) {
     expect(await run(tools, "propose_booking", { name: "Sam (synthetic)", email: "Sam@Example.com", service: "haircut", date, time })).toMatch(/card is shown/);
@@ -196,6 +204,87 @@ describe("booking turn", () => {
     await pool.query("INSERT INTO conversations (id, widget_id) VALUES ('cv_b', 'w_b')");
     const r = await turn("hi", "cv_b");
     expect(r.conversationId).not.toBe("cv_b");
+  });
+});
+
+describe("booking emails", () => {
+  const withResend = () => putCredential(A, "resend_send_key", "re_send_only", { key_name: "kitpier-x", verified_domains: [] });
+  const proposeFor = (date: string, email: string, time = "10:00") =>
+    async function* (tools: Tool[]) {
+      await run(tools, "propose_booking", { name: "<b>Sam</b>", email, service: "Haircut", date, time });
+      yield msg("Check the card.");
+    };
+
+  it("a verified code books and sends one fixed-template confirmation to that address", async () => {
+    await withResend();
+    script = proposeFor(nextTuesday(), "sam@example.com");
+    const t = await turn("book");
+    expect(t.emailAvailable).toBe(true);
+    await requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1");
+    expect(emails[0]).toMatchObject({ to: ["sam@example.com"], from: "Sam's Barbershop <onboarding@resend.dev>" });
+    const code = lastCode();
+    expect((await pool.query("SELECT code_hash FROM email_codes")).rows[0].code_hash).not.toContain(code);
+
+    const c = await confirm(t.conversationId, t.pending!.id, rid(), code);
+    expect(c.booked).toBe(true);
+    expect(c.reply).toMatch(/confirmation is on its way to sam@example.com/);
+    const conf = emails[1];
+    expect(conf.to).toEqual(["sam@example.com"]);
+    expect(conf.text).toContain("Sam");
+    expect(conf.html).not.toMatch(/<a |href|<b>/); // customer text never becomes markup
+    expect(emails).toHaveLength(2);
+  });
+
+  it("wrong, expired and replayed codes are refused; no code means booked without email", async () => {
+    await withResend();
+    script = proposeFor(nextTuesday(), "sam@example.com");
+    const t = await turn("book");
+    await requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1");
+    const code = lastCode();
+    expect(await confirm(t.conversationId, t.pending!.id, rid(), code === "000000" ? "111111" : "000000")).toMatchObject({ booked: false });
+    await pool.query("UPDATE email_codes SET expires_at = now() - interval '1 second'");
+    expect(await confirm(t.conversationId, t.pending!.id, rid(), code)).toMatchObject({ booked: false });
+    expect(rows).toHaveLength(0);
+
+    await pool.query("UPDATE email_codes SET expires_at = now() + interval '5 minutes'");
+    // A code works once.
+    const p = (await pool.query("SELECT pending FROM conversations WHERE id = $1", [t.conversationId])).rows[0].pending;
+    expect(await verifyCode(t.conversationId, p, code)).toBe(true);
+    expect(await verifyCode(t.conversationId, p, code)).toBe(false);
+    expect(await confirm(t.conversationId, t.pending!.id, rid(), code)).toMatchObject({ booked: false, reply: expect.stringMatching(/code didn't work/) });
+
+    const plainConfirm = await confirm(t.conversationId, t.pending!.id);
+    expect(plainConfirm.booked).toBe(true);
+    expect(emails.filter((e) => e.subject.startsWith("Booking confirmed"))).toHaveLength(0);
+  });
+
+  it("changing the address after verifying voids the code", async () => {
+    await withResend();
+    script = proposeFor(nextTuesday(), "sam@example.com");
+    const t1 = await turn("book");
+    await requestBookingCode("w_a", t1.conversationId, t1.pending!.id, "1.1.1.1");
+    const code = lastCode();
+    script = proposeFor(nextTuesday(), "victim@example.com");
+    const t2 = await turn("actually use victim@example.com", t1.conversationId);
+    expect(t2.pending!.id).not.toBe(t1.pending!.id);
+    expect(await confirm(t1.conversationId, t2.pending!.id, rid(), code)).toMatchObject({ booked: false });
+    expect(emails.some((e) => e.to.includes("victim@example.com"))).toBe(false);
+  });
+
+  it("code sends are rate-limited per conversation", async () => {
+    await withResend();
+    script = proposeFor(nextTuesday(), "sam@example.com");
+    const t = await turn("book");
+    for (let i = 0; i < 3; i++) await requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1");
+    await expect(requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1")).rejects.toMatchObject({ status: 429 });
+    expect(emails).toHaveLength(3);
+  });
+
+  it("no email option when the business hasn't connected Resend", async () => {
+    script = proposeFor(nextTuesday(), "sam@example.com");
+    const t = await turn("book");
+    expect(t.emailAvailable).toBe(false);
+    await expect(requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1")).rejects.toMatchObject({ status: 409 });
   });
 });
 

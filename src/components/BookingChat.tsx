@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { api } from "@/lib/client";
 
 type Msg = { role: "user" | "assistant"; body: string };
 type Pending = { id: string; name: string; email: string; service: string; date: string; time: string };
-type Result = { conversationId: string; reply: string; booked: boolean; paused?: boolean; pending?: Pending | null };
+type Result = { conversationId: string; reply: string; booked: boolean; paused?: boolean; pending?: Pending | null; emailAvailable?: boolean };
 
 /** POST with a request id; on a network failure, retry once with the same id (the server returns the first result). */
 async function call(path: string, payload: object): Promise<Result> {
@@ -29,6 +30,10 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([{ role: "assistant", body: `Hi! I can book you in at ${business}. What would you like, and when?` }]);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [emailAvailable, setEmailAvailable] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -36,7 +41,13 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
   function apply(r: Result) {
     setConversationId(r.conversationId);
     setMsgs((m) => [...m, { role: "assistant", body: r.reply }]);
-    setPending(r.booked || r.paused ? null : (r.pending ?? null));
+    const next = r.booked || r.paused ? null : (r.pending ?? null);
+    if (next?.id !== pending?.id) {
+      setCodeSent(false); // a new card needs a new code
+      setCode("");
+    }
+    setPending(next);
+    if (r.emailAvailable !== undefined) setEmailAvailable(r.emailAvailable);
     if (r.booked || r.paused) setDone(true);
   }
 
@@ -93,12 +104,48 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
               <dt className="text-muted">Email</dt>
               <dd>{pending.email}</dd>
             </dl>
+            {emailAvailable && (
+              <div className="space-y-2 border-t border-line pt-2">
+                {!codeSent ? (
+                  <button
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setCodeError(null);
+                      try {
+                        await api(`/r/${widgetId}/code`, { body: { conversationId, pendingId: pending.id } });
+                        setCodeSent(true);
+                      } catch (e) {
+                        setCodeError((e as Error).message);
+                      }
+                      setBusy(false);
+                    }}
+                    className="text-accent underline disabled:opacity-50"
+                  >
+                    Email me a confirmation (we&apos;ll send a code first)
+                  </button>
+                ) : (
+                  <label className="block space-y-1">
+                    <span className="text-muted">Enter the 6-digit code we sent to {pending.email}</span>
+                    <input
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      className="w-32 rounded-xl border border-line bg-paper px-3 py-2 tracking-widest"
+                    />
+                  </label>
+                )}
+                {codeError && <p className="text-danger">{codeError}</p>}
+              </div>
+            )}
             <button
-              disabled={busy}
-              onClick={() => run(() => call(`/r/${widgetId}/confirm`, { conversationId, pendingId: pending.id }))}
+              disabled={busy || (codeSent && code.length > 0 && code.length < 6)}
+              onClick={() => run(() => call(`/r/${widgetId}/confirm`, { conversationId, pendingId: pending.id, code: code.length === 6 ? code : undefined }))}
               className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
-              Confirm booking
+              {code.length === 6 ? "Confirm and email me" : "Confirm booking"}
             </button>
             <p className="text-xs text-muted">Something wrong? Just type the change below.</p>
           </li>

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { PRICES } from "./pricecard";
 import { claimBooking, recordTurnUsage, releaseBooking, reserveTurn, settleTurn } from "./billing";
 import { getCredential } from "./credentials";
+import { emailConnected, sendCode, sendConfirmation, verifyCode } from "./email";
 import { many, newId, one, pool, tx } from "./db";
 import { rateLimit } from "./http";
 import { costMicros } from "./platform";
@@ -269,7 +270,14 @@ async function loadConversation(widgetId: string, conversationId: string | null)
 
 let client: Anthropic | undefined;
 
-export type TurnResult = { conversationId: string; reply: string; booked: boolean; paused?: boolean; pending?: Omit<Pending, "starts_at"> | null };
+export type TurnResult = {
+  conversationId: string;
+  reply: string;
+  booked: boolean;
+  paused?: boolean;
+  pending?: Omit<Pending, "starts_at"> | null;
+  emailAvailable?: boolean; // the business can send a confirmation email (customer verifies with a code first)
+};
 
 const publicPending = (p: Pending | null) => (p ? { id: p.id, name: p.name, email: p.email, service: p.service, date: p.date, time: p.time } : null);
 const PAUSED = (w: Widget) => `Online booking is paused right now. Please contact ${w.business_name} directly.`;
@@ -360,7 +368,7 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
       .trim();
     if (!reply) reply = pending ? "Please check the details below and press Confirm." : "Sorry, something went wrong on our side. Could you say that again?";
     await pool.query("INSERT INTO conversation_messages (conversation_id, role, body) VALUES ($1, 'assistant', $2)", [c.id, reply.slice(0, 2000)]);
-    return done({ conversationId: c.id, reply, booked: false, pending: publicPending(pending) });
+    return done({ conversationId: c.id, reply, booked: false, pending: publicPending(pending), emailAvailable: pending ? await emailConnected(s) : undefined });
   }));
 }
 
@@ -369,7 +377,14 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
  * must match the card id. Charged $0.05 only if the booking is written. Retries are safe (lease + request id +
  * "already saved" check after a lost response).
  */
-export async function confirmBooking(widgetId: string, conversationId: string, pendingId: string, requestId: string, ip: string): Promise<TurnResult> {
+export async function confirmBooking(
+  widgetId: string,
+  conversationId: string,
+  pendingId: string,
+  requestId: string,
+  ip: string,
+  code?: string,
+): Promise<TurnResult> {
   const w = await getWidget(widgetId);
   if (!w) throw new HttpError(404, "Booking page not found");
   const s = { userId: w.user_id, projectId: w.project_id };
@@ -389,6 +404,10 @@ export async function confirmBooking(widgetId: string, conversationId: string, p
     if (c.booked) return done({ conversationId: c.id, reply: "You're already booked.", booked: true });
     const p = c.pending;
     if (!p || p.id !== pendingId) return done({ conversationId: c.id, reply: "Those details changed. Please check the latest card.", booked: false, pending: publicPending(p) });
+    // A code is optional; when given it must be right, and it is what allows the confirmation email.
+    const verified = code ? await verifyCode(c.id, p, code) : false;
+    if (code && !verified)
+      return done({ conversationId: c.id, reply: "That code didn't work or has expired. Check it, ask for a new one, or confirm without email.", booked: false, pending: publicPending(p), emailAvailable: true });
 
     let reservation;
     try {
@@ -421,8 +440,28 @@ export async function confirmBooking(widgetId: string, conversationId: string, p
       throw e instanceof HttpError ? e : new HttpError(502, "Couldn't save the booking. Please press Confirm again.");
     }
     await settleTurn(reservation.id);
+    if (booked && verified) {
+      try {
+        await sendConfirmation(s, w, c.id, p);
+        reply += ` A confirmation is on its way to ${p.email}.`;
+      } catch {
+        reply += " We couldn't send the confirmation email, but your booking is saved.";
+      }
+    }
     await pool.query("INSERT INTO conversation_messages (conversation_id, role, body) VALUES ($1, 'assistant', $2)", [c.id, reply]);
     return done({ conversationId: c.id, reply, booked });
   }));
 }
 
+
+/** Email a one-time code for the current booking card. No booking happens here. */
+export async function requestBookingCode(widgetId: string, conversationId: string, pendingId: string, ip: string) {
+  const w = await getWidget(widgetId);
+  if (!w) throw new HttpError(404, "Booking page not found");
+  const s = { userId: w.user_id, projectId: w.project_id };
+  const c = await loadConversation(w.id, conversationId);
+  if (!c || c.booked || !c.pending || c.pending.id !== pendingId) throw new HttpError(409, "Those details changed. Please check the latest card.");
+  if (!(await emailConnected(s))) throw new HttpError(409, "This business hasn't set up email yet");
+  await sendCode(s, w, c.id, c.pending, ip);
+  return { sent: true, to: c.pending.email };
+}
