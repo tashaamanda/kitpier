@@ -6,7 +6,7 @@ import type { Proposal } from "@/lib/stack";
 import { Badge } from "./Catalog";
 
 type Msg = { id: number; role: "user" | "assistant"; body: string; proposal_id: string | null };
-type Status = { credits_usd: number; supabase_connected: boolean; resend_connected: boolean; stack: string };
+type Status = { credits_usd: number; supabase_connected: boolean; resend_connected: boolean; database_ready: boolean; stack: string };
 type View = { messages: Msg[]; proposals: Proposal[]; status: Status };
 
 // "What are you building?" → planner chat → stack card → Approve. Text is rendered as text, never HTML.
@@ -120,6 +120,7 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
   const steps = [
     has("booking-api") && { label: "Buy credits with PayPal", done: status.credits_usd > 0, href: "#credits" },
     has("supabase") && { label: "Connect Supabase", done: status.supabase_connected, href: "#accounts" },
+    has("supabase") && { label: "Approve the database setup", done: status.database_ready, href: "#accounts" },
     has("resend") && { label: "Connect Resend", done: status.resend_connected, href: "#accounts" },
   ].filter(Boolean) as { label: string; done: boolean; href: string }[];
 

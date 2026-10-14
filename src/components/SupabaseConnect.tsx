@@ -2,8 +2,13 @@
 
 import { useState } from "react";
 import { api } from "@/lib/client";
+import DatabaseSetup from "./DatabaseSetup";
 
-export type Connection = { kind: string; meta: { orgs?: string[]; key_name?: string; verified_domains?: string[] }; created_at: string };
+export type Connection = {
+  kind: string;
+  meta: { orgs?: string[]; key_name?: string; verified_domains?: string[] };
+  created_at: string;
+};
 
 // Connect stores access only. Nothing is created in Supabase until you approve a proposed change.
 export default function SupabaseConnect({
@@ -43,32 +48,35 @@ export default function SupabaseConnect({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p className="font-semibold">Supabase</p>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">Supabase</p>
+          {connection ? (
+            <p className="text-sm text-muted">
+              Connected{connection.meta.orgs?.length ? ` · ${connection.meta.orgs.join(", ")}` : ""}. Kitpier only changes
+              what you approve.
+            </p>
+          ) : (
+            <p className="text-sm text-muted">Database for your app. Connecting creates nothing in your account.</p>
+          )}
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </div>
         {connection ? (
-          <p className="text-sm text-muted">
-            Connected{connection.meta.orgs?.length ? ` · ${connection.meta.orgs.join(", ")}` : ""}. Nothing has been
-            created: changes wait for your approval.
-          </p>
+          <button disabled={busy} onClick={disconnect} className="text-sm text-muted underline disabled:opacity-50">
+            Disconnect
+          </button>
         ) : (
-          <p className="text-sm text-muted">Database for your app. Connecting creates nothing in your account.</p>
+          <button
+            disabled={busy}
+            onClick={connect}
+            className="rounded-xl border border-accent px-4 py-2 text-sm font-semibold text-accent disabled:opacity-50"
+          >
+            Connect Supabase
+          </button>
         )}
-        {error && <p className="text-sm text-danger">{error}</p>}
       </div>
-      {connection ? (
-        <button disabled={busy} onClick={disconnect} className="text-sm text-muted underline disabled:opacity-50">
-          Disconnect
-        </button>
-      ) : (
-        <button
-          disabled={busy}
-          onClick={connect}
-          className="rounded-xl border border-accent px-4 py-2 text-sm font-semibold text-accent disabled:opacity-50"
-        >
-          Connect Supabase
-        </button>
-      )}
+      {connection && <DatabaseSetup projectId={projectId} />}
     </div>
   );
 }
