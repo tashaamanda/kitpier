@@ -38,6 +38,9 @@ export default function Dashboard({
         <div>
           <p className="text-sm text-muted">Signed in as {name}</p>
           <h1 className="text-3xl font-semibold">Your projects</h1>
+          <Link href="/catalog" className="text-sm text-accent underline">
+            Browse the catalog
+          </Link>
         </div>
         <div className="text-right">
           <p className="text-sm text-muted">Credits</p>

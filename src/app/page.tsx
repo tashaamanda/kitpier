@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { pool } from "@/lib/db";
 import { postedBalance } from "@/lib/ledger";
@@ -16,6 +17,9 @@ async function Home() {
         <p className="mb-6 mt-2 text-lg text-muted">
           The app store for AI-built software. Discover, buy, and connect the services your app needs.
         </p>
+        <Link href="/catalog" className="mb-6 font-semibold text-accent underline">
+          Browse the catalog →
+        </Link>
         <AuthForm />
       </main>
     );
