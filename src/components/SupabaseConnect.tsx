@@ -76,7 +76,7 @@ export default function SupabaseConnect({
           </button>
         )}
       </div>
-      {connection && <DatabaseSetup projectId={projectId} />}
+      {connection && <DatabaseSetup projectId={projectId} onReady={onChange} />}
     </div>
   );
 }

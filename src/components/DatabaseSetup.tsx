@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import type { Job, ProvisionSpec } from "@/lib/provision";
 
@@ -14,18 +14,23 @@ const STEPS = [
 ];
 
 // Propose → approve → progress. Nothing is created in Supabase before the Approve click.
-export default function DatabaseSetup({ projectId }: { projectId: string }) {
+export default function DatabaseSetup({ projectId, onReady }: { projectId: string; onReady: () => void }) {
   const [st, setSt] = useState<State | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const wasRunning = useRef(false);
   const poll = useCallback(async () => {
     try {
-      setSt(await api<State>(`/api/projects/${projectId}/provision`));
+      const next = await api<State>(`/api/projects/${projectId}/provision`);
+      const nowRunning = !!next.job && !["schema_ready", "failed"].includes(next.job.state);
+      if (wasRunning.current && next.job?.state === "schema_ready") onReady(); // let the page show the next step
+      wasRunning.current = nowRunning;
+      setSt(next);
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [projectId]);
+  }, [projectId, onReady]);
 
   const running = !!st?.job && !["schema_ready", "failed"].includes(st.job.state);
   useEffect(() => {

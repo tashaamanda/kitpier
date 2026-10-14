@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, usd } from "@/lib/client";
+import BookingPageSetup from "./BookingPageSetup";
 import BuyCredits from "./BuyCredits";
 import Planner from "./Planner";
 import ResendConnect from "./ResendConnect";
@@ -16,6 +17,7 @@ export default function ProjectView({ projectId, name, description }: { projectI
   const [orders, setOrders] = useState<Order[]>([]);
   const [balance, setBalance] = useState(0);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [databaseReady, setDatabaseReady] = useState(false);
   const [rev, setRev] = useState(0); // bumps after every reload so the planner's checklist refreshes too
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [autoStart] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("start"));
@@ -33,12 +35,13 @@ export default function ProjectView({ projectId, name, description }: { projectI
 
   const load = useCallback(async () => {
     const [p, me] = await Promise.all([
-      api<{ ledger: Entry[]; orders: Order[]; connections: Connection[] }>(`/api/projects/${projectId}`),
+      api<{ ledger: Entry[]; orders: Order[]; connections: Connection[]; databaseReady: boolean }>(`/api/projects/${projectId}`),
       api<{ balanceMicros: number }>("/api/me"),
     ]);
     setLedger(p.ledger);
     setOrders(p.orders);
     setConnections(p.connections);
+    setDatabaseReady(p.databaseReady);
     setRev((r) => r + 1);
     setBalance(me.balanceMicros);
   }, [projectId]);
@@ -80,6 +83,7 @@ export default function ProjectView({ projectId, name, description }: { projectI
           onChange={load}
         />
       </section>
+      <BookingPageSetup key={rev} projectId={projectId} databaseReady={databaseReady} />
       <section id="credits" className="rounded-2xl border border-line bg-card p-5">
         <h2 className="mb-3 font-semibold">Buy credits with PayPal</h2>
         <BuyCredits projectId={projectId} onPaid={load} />

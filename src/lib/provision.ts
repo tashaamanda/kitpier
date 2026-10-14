@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { createWidgetTx, WidgetSpec } from "./booking";
 import { putCredential } from "./credentials";
 import { newId, one, pool, tx } from "./db";
 import { HttpError } from "./session";
@@ -76,13 +77,18 @@ export async function proposeProvision(s: Scope) {
 /** The approval gate. Session + origin are checked by the route; ownership here. Idempotent per project. */
 export async function decideAction(userId: string, actionId: string, approve: boolean) {
   return tx(async (c) => {
-    const a = await one<{ project_id: string; kind: string }>(
+    const a = await one<{ project_id: string; kind: string; spec: unknown }>(
       c,
       `UPDATE pending_actions SET status = $3, decided_at = now()
-       WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING project_id, kind`,
+       WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING project_id, kind, spec`,
       [actionId, userId, approve ? "approved" : "rejected"],
     );
     if (!a) throw new HttpError(404, "This request is no longer waiting for approval");
+    if (approve && a.kind === "create_widget") {
+      const widget = await createWidgetTx(c, { userId, projectId: a.project_id }, WidgetSpec.parse(a.spec));
+      await c.query("UPDATE pending_actions SET status = 'done' WHERE id = $1", [actionId]);
+      return { project_id: a.project_id, job: null, widget };
+    }
     if (!approve || a.kind !== "provision_supabase") return { project_id: a.project_id, job: null };
     const job = await one<Job>(
       c,
