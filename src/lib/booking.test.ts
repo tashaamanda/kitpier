@@ -84,6 +84,14 @@ describe("booking turn", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ name: "Sam (synthetic)", service: "Haircut" });
     expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 20_000 - 70_000);
+
+    // After the booking the chat is over: fixed reply, no model call, no charge.
+    script = async function* () {
+      throw new Error("model must not be called");
+    };
+    const t3 = await bookingTurn("w_a", t1.conversationId, "what shampoo?", "1.1.1.1");
+    expect(t3).toMatchObject({ booked: true });
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 90_000);
   });
 
   it("one booking per conversation, taken slots refused, unknown services refused", async () => {

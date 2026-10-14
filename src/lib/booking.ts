@@ -212,12 +212,18 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
   await rateLimit(`book-widget:${w.id}`, 400, 24 * 60 * 60_000);
 
   let conv = conversationId
-    ? await one<{ id: string; turns: number; input_chars: number }>(pool, "SELECT id, turns, input_chars FROM conversations WHERE id = $1 AND widget_id = $2", [conversationId, w.id])
+    ? await one<{ id: string; turns: number; input_chars: number; booked: boolean }>(
+        pool,
+        "SELECT id, turns, input_chars, booked FROM conversations WHERE id = $1 AND widget_id = $2",
+        [conversationId, w.id],
+      )
     : undefined;
+  // A chat ends with its booking: no more model turns (and no charge) after that.
+  if (conv?.booked) return { conversationId: conv.id, reply: "You're all booked. To make another booking, please start a new chat.", booked: true };
   if (!conv) {
     const id = newId("cv");
     await pool.query("INSERT INTO conversations (id, widget_id) VALUES ($1, $2)", [id, w.id]);
-    conv = { id, turns: 0, input_chars: 0 };
+    conv = { id, turns: 0, input_chars: 0, booked: false };
   }
   if (conv.turns >= LIMITS.turns || conv.input_chars + text.length > LIMITS.conversationChars)
     return { conversationId: conv.id, reply: "This chat has reached its limit. Please start a new one.", booked: false };
