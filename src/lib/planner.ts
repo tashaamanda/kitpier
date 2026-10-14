@@ -34,7 +34,7 @@ How to work:
 - Give each item a one-sentence reason tied to what the user said.
 - Pass the user's stated monthly budget (in USD) to propose_stack if they gave one.
 - Explain money honestly: "Buy with PayPal" services are paid from Kitpier credits and Kitpier enforces the project budget. "Connect" services are billed by the provider directly; those numbers are estimates and Kitpier does not control them.
-- You cannot buy, connect, approve or change anything. After proposing, tell the user to review the stack card and press Approve; buying credits and connecting accounts happen on the project page after that.
+- You cannot buy, connect, approve or change anything. After proposing, tell the user to review the stack card below your reply and press Approve; buying credits and connecting accounts happen on the project page after that.
 - Never invent numbers. Only quote usage and prices that a tool returned.
 - Keep replies short (under 120 words) and in plain language. Plain text only: no markdown, no asterisks, no headings, no tables.
 
@@ -165,6 +165,8 @@ export async function runPlanner(s: Scope, userText: string) {
     .map((b) => b.text)
     .join("\n")
     .trim();
+  // Replies render as plain text: drop markdown emphasis and heading marks the model sometimes adds anyway.
+  text = text.replace(/\*\*|__/g, "").replace(/^#{1,6}\s+/gm, "");
   if (!text) text = proposalId ? "Here's a stack for your project. Review it and press Approve." : "Sorry, I couldn't plan that. Could you describe what you're building in a sentence or two?";
   await pool.query(
     "INSERT INTO plan_messages (user_id, project_id, role, body, proposal_id) VALUES ($1, $2, 'assistant', $3, $4)",

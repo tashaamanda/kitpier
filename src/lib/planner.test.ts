@@ -120,3 +120,14 @@ describe("planner", () => {
     expect((await day()).reserved_micros).toBe(0);
   });
 });
+
+describe("planner replies", () => {
+  it("are stored as plain text", async () => {
+    script = async function* () {
+      yield msg("## Plan\n**Kitpier Booking API** takes bookings.\n- Supabase stores them.");
+    };
+    await runPlanner(A, "hi");
+    const r = await pool.query("SELECT body FROM plan_messages WHERE role = 'assistant'");
+    expect(r.rows[0].body).toBe("Plan\nKitpier Booking API takes bookings.\n- Supabase stores them.");
+  });
+});
