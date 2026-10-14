@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
 
-export type Connection = { kind: string; meta: { orgs?: string[] }; created_at: string };
+export type Connection = { kind: string; meta: { orgs?: string[]; key_name?: string; verified_domains?: string[] }; created_at: string };
 
 // Connect stores access only. Nothing is created in Supabase until you approve a proposed change.
 export default function SupabaseConnect({

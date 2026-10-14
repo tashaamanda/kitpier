@@ -19,7 +19,7 @@ export const GET = route(async (_req: Request, ctx: { params: Promise<{ id: stri
   // Status only: kind, display meta and dates. Secrets never leave the server.
   const connections = await many(
     pool,
-    "SELECT kind, meta, created_at FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind = 'supabase_oauth'",
+    "SELECT kind, meta, created_at FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind IN ('supabase_oauth', 'resend_send_key')",
     [user.id, project.id],
   );
   return { project, ledger, orders, connections };

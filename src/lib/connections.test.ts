@@ -10,6 +10,7 @@ process.env.APP_URL = "http://localhost:3005";
 const { pool } = await import("./db");
 const { seal, open, putCredential, getCredential } = await import("./credentials");
 const { startConnect, claimState, finishConnect, accessToken } = await import("./supabase");
+const { connectResend } = await import("./resend");
 
 const A = { userId: "usr_a", projectId: "prj_a" };
 const B = { userId: "usr_b", projectId: "prj_b" };
@@ -82,5 +83,32 @@ describe("Supabase OAuth", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][1].body)).toContain("refresh_token=rt1");
     expect(JSON.parse((await getCredential(A, "supabase_oauth"))!.secret).refresh_token).toBe("rt2");
+  });
+});
+
+describe("Resend connect", () => {
+  const FULL = "re_FULLACCESS_should_never_be_stored";
+
+  it("mints a send-only key with the full key, stores only the scoped one", async () => {
+    fetchMock
+      .mockImplementationOnce(() => reply(200, { data: [{ name: "salon.test", status: "verified" }, { name: "x.test", status: "pending" }] }))
+      .mockImplementationOnce(() => reply(201, { id: "k1", token: "re_SCOPED_send_only" }));
+    await connectResend(A, FULL);
+    const [, mint] = fetchMock.mock.calls[1];
+    expect(JSON.parse(mint.body)).toMatchObject({ permission: "sending_access" });
+    const c = await getCredential(A, "resend_send_key");
+    expect(c?.secret).toBe("re_SCOPED_send_only");
+    expect(c?.meta).toMatchObject({ verified_domains: ["salon.test"] });
+    const dump = JSON.stringify((await pool.query("SELECT *, ciphertext::text AS c FROM credentials")).rows);
+    expect(dump).not.toContain("FULLACCESS");
+    expect(dump).not.toContain("SCOPED");
+  });
+
+  it("explains a sending-only key, rejects a bad key, and stores nothing", async () => {
+    fetchMock.mockImplementationOnce(() => reply(401, { name: "restricted_api_key" }));
+    await expect(connectResend(A, FULL)).rejects.toMatchObject({ code: "restricted_api_key", status: 400 });
+    fetchMock.mockImplementationOnce(() => reply(401, { name: "validation_error", message: "API key is invalid" }));
+    await expect(connectResend(A, FULL)).rejects.toMatchObject({ status: 400 });
+    expect(await getCredential(A, "resend_send_key")).toBeUndefined();
   });
 });

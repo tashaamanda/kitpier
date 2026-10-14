@@ -14,11 +14,13 @@ export default function Planner({
   projectId,
   description,
   autoStart,
+  rev,
   onApproved,
 }: {
   projectId: string;
   description: string;
   autoStart: boolean;
+  rev: number;
   onApproved: () => void;
 }) {
   const [view, setView] = useState<View | null>(null);
@@ -51,7 +53,7 @@ export default function Planner({
         send(description);
       }
     }, (e) => setError((e as Error).message));
-  }, [projectId, autoStart, description, send]);
+  }, [projectId, autoStart, description, send, rev]);
 
   async function approve(proposalId: string) {
     setBusy(true);
@@ -118,7 +120,7 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
   const steps = [
     has("booking-api") && { label: "Buy credits with PayPal", done: status.credits_usd > 0, href: "#credits" },
     has("supabase") && { label: "Connect Supabase", done: status.supabase_connected, href: "#accounts" },
-    has("resend") && { label: "Connect Resend (coming next)", done: status.resend_connected, href: "#accounts" },
+    has("resend") && { label: "Connect Resend", done: status.resend_connected, href: "#accounts" },
   ].filter(Boolean) as { label: string; done: boolean; href: string }[];
 
   return (

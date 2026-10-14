@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, usd } from "@/lib/client";
 import BuyCredits from "./BuyCredits";
 import Planner from "./Planner";
+import ResendConnect from "./ResendConnect";
 import SupabaseConnect, { type Connection } from "./SupabaseConnect";
 
 type Entry = { source: string; kind: string; amount_micros: number; created_at: string };
@@ -15,6 +16,7 @@ export default function ProjectView({ projectId, name, description }: { projectI
   const [orders, setOrders] = useState<Order[]>([]);
   const [balance, setBalance] = useState(0);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [rev, setRev] = useState(0); // bumps after every reload so the planner's checklist refreshes too
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [autoStart] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("start"));
 
@@ -37,6 +39,7 @@ export default function ProjectView({ projectId, name, description }: { projectI
     setLedger(p.ledger);
     setOrders(p.orders);
     setConnections(p.connections);
+    setRev((r) => r + 1);
     setBalance(me.balanceMicros);
   }, [projectId]);
 
@@ -62,12 +65,18 @@ export default function ProjectView({ projectId, name, description }: { projectI
           {notice.text}
         </p>
       )}
-      <Planner projectId={projectId} description={description} autoStart={autoStart} onApproved={load} />
+      <Planner projectId={projectId} description={description} autoStart={autoStart} rev={rev} onApproved={load} />
       <section id="accounts" className="rounded-2xl border border-line bg-card p-5">
         <h2 className="mb-3 font-semibold">Your accounts</h2>
         <SupabaseConnect
           projectId={projectId}
           connection={connections.find((c) => c.kind === "supabase_oauth")}
+          onChange={load}
+        />
+        <div className="my-4 border-t border-line" />
+        <ResendConnect
+          projectId={projectId}
+          connection={connections.find((c) => c.kind === "resend_send_key")}
           onChange={load}
         />
       </section>
