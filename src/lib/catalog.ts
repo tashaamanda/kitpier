@@ -37,6 +37,8 @@ export type Listing = {
   priceSummary: string;
   /** Typical-month cost from the price card ("buy" only). */
   monthlyMicros?: number;
+  /** Provider-billed estimate ("connect" only): free tier available, paid plans start here. Not enforced. */
+  paidFromMicros?: number;
   pricing: string;
   setup?: string[];
   website?: string;
@@ -78,6 +80,7 @@ export const LISTINGS: Listing[] = [
       "New project, or a dedicated schema in one you choose",
     ],
     priceSummary: "Free plan · paid from ~$25/mo",
+    paidFromMicros: 25_000_000,
     pricing: "Free plan available; paid plans from about $25/month, billed by Supabase",
     setup: ["Authorize Kitpier in Supabase", "Approve the proposed project or schema", "Wait for provisioning"],
     website: "https://supabase.com",
@@ -93,6 +96,7 @@ export const LISTINGS: Listing[] = [
       "Paste a Resend key once. Kitpier uses it to create a send-only key and discards the original, so only a scoped key is ever stored.",
     features: ["Send-only scoped key", "Your sender, your account", "Fixed confirmation template, no model-written email"],
     priceSummary: "Free tier · paid from ~$20/mo",
+    paidFromMicros: 20_000_000,
     pricing: "Free tier available; paid plans from about $20/month, billed by Resend",
     setup: ["Create a full-access key in Resend", "Paste it into Kitpier once", "Kitpier mints a send-only key"],
     website: "https://resend.com",

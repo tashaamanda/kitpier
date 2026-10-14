@@ -32,7 +32,7 @@ export default function BuildBox() {
       const { id } = await api<{ id: string }>("/api/projects", {
         body: { name: description.slice(0, 60), description },
       });
-      router.push(`/projects/${id}`);
+      router.push(`/projects/${id}?start=1`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

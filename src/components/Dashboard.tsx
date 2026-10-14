@@ -39,7 +39,7 @@ export default function Dashboard({
       const { id } = await api<{ id: string }>("/api/projects", {
         body: { name: f.get("name"), description: f.get("description") || undefined },
       });
-      router.push(`/projects/${id}`);
+      router.push(`/projects/${id}${f.get("description") ? "?start=1" : ""}`);
     } catch (err) {
       setError((err as Error).message);
     }

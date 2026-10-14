@@ -4,25 +4,27 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, usd } from "@/lib/client";
 import BuyCredits from "./BuyCredits";
+import Planner from "./Planner";
 import SupabaseConnect, { type Connection } from "./SupabaseConnect";
 
 type Entry = { source: string; kind: string; amount_micros: number; created_at: string };
 type Order = { id: string; pack_id: string; amount_micros: number; status: string; created_at: string };
 
-export default function ProjectView({ projectId, name }: { projectId: string; name: string }) {
+export default function ProjectView({ projectId, name, description }: { projectId: string; name: string; description: string }) {
   const [ledger, setLedger] = useState<Entry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [balance, setBalance] = useState(0);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [autoStart] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("start"));
 
   // Result of the Supabase OAuth round trip, passed back in the URL once.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const err = q.get("connect_error");
     const next = err ? { ok: false, text: err } : q.get("connected") ? { ok: true, text: "Supabase connected." } : null;
+    if (q.size) window.history.replaceState(null, "", window.location.pathname);
     if (next) {
-      window.history.replaceState(null, "", window.location.pathname);
       setTimeout(() => setNotice(next), 0);
     }
   }, []);
@@ -60,7 +62,8 @@ export default function ProjectView({ projectId, name }: { projectId: string; na
           {notice.text}
         </p>
       )}
-      <section className="rounded-2xl border border-line bg-card p-5">
+      <Planner projectId={projectId} description={description} autoStart={autoStart} onApproved={load} />
+      <section id="accounts" className="rounded-2xl border border-line bg-card p-5">
         <h2 className="mb-3 font-semibold">Your accounts</h2>
         <SupabaseConnect
           projectId={projectId}
@@ -68,7 +71,7 @@ export default function ProjectView({ projectId, name }: { projectId: string; na
           onChange={load}
         />
       </section>
-      <section className="rounded-2xl border border-line bg-card p-5">
+      <section id="credits" className="rounded-2xl border border-line bg-card p-5">
         <h2 className="mb-3 font-semibold">Buy credits with PayPal</h2>
         <BuyCredits projectId={projectId} onPaid={load} />
       </section>
