@@ -16,5 +16,11 @@ export const GET = route(async (_req: Request, ctx: { params: Promise<{ id: stri
     "SELECT id, pack_id, amount_micros, status, created_at FROM orders WHERE user_id = $1 AND project_id = $2 ORDER BY created_at DESC LIMIT 20",
     [user.id, project.id],
   );
-  return { project, ledger, orders };
+  // Status only: kind, display meta and dates. Secrets never leave the server.
+  const connections = await many(
+    pool,
+    "SELECT kind, meta, created_at FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind = 'supabase_oauth'",
+    [user.id, project.id],
+  );
+  return { project, ledger, orders, connections };
 });
