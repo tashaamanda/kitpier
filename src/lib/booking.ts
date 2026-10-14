@@ -142,7 +142,7 @@ async function upcoming(s: Scope, w: Widget) {
   return dates
     .map((date) => {
       const free = openSlots(date, w.timezone, booked).map((x) => x.time);
-      return `${DAY_NAMES[weekday(date)]} ${date}: ${free.length ? free.join(", ") : "fully booked"}`;
+      return `${DAY_NAMES[weekday(date)]} ${date}: ${free.length ? free.join(", ") : "no times left"}`;
     })
     .join("\n");
 }
