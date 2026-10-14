@@ -120,7 +120,22 @@ async function slotsFor(s: Scope, w: Widget, date: string) {
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-function system(w: Widget) {
+/** Free times for the next 7 open days, read from the database at the start of every turn. */
+async function upcoming(s: Scope, w: Widget) {
+  const today = localToday(w.timezone);
+  const db = await database(s);
+  const [y, m, d] = today.split("-").map(Number);
+  const dates = Array.from({ length: 8 }, (_, i) => new Date(Date.UTC(y, m - 1, d + i)).toISOString().slice(0, 10)).filter((x) => weekday(x) !== 0);
+  const booked = await db.bookedBetween(zonedToUtc(dates[0], 0, w.timezone), zonedToUtc(dates[dates.length - 1], 24, w.timezone));
+  return dates
+    .map((date) => {
+      const free = openSlots(date, w.timezone, booked).map((x) => x.time);
+      return `${DAY_NAMES[weekday(date)]} ${date}: ${free.length ? free.join(", ") : "fully booked"}`;
+    })
+    .join("\n");
+}
+
+function system(w: Widget, availability: string) {
   const today = localToday(w.timezone);
   return `You are the online booking assistant for the business named ${JSON.stringify(w.business_name)}. You only help customers book an appointment.
 
@@ -128,8 +143,11 @@ Services: ${w.services.map((x) => JSON.stringify(x)).join(", ")}.
 Hours: Monday to Saturday, ${OPEN_HOUR}:00 to ${CLOSE_HOUR}:00 (${w.timezone}). Appointments are one hour. Bookings up to ${DAYS_AHEAD} days ahead.
 Today is ${DAY_NAMES[weekday(today)]} ${today}.
 
+Free times right now (from the live calendar):
+${availability}
+
 How to book:
-1. Find out which service and roughly when. Use check_slots for the date; never guess availability.
+1. Find out which service and roughly when. Offer only times from the list above, or from check_slots for later dates. Never say a time is free unless it appears in one of those.
 2. Ask for the customer's name and email.
 3. Read back service, day, time and name, and ask them to confirm.
 4. Only after they confirm, call create_booking.
@@ -229,7 +247,7 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
     const runner = client.beta.messages.toolRunner({
       model: BOOKING_MODEL,
       max_tokens: MAX_TOKENS,
-      system: system(w),
+      system: system(w, await upcoming(s, w)),
       tools: tools(s, w, conv.id, reservation.id, () => (booked = true)),
       max_iterations: MAX_ITERATIONS,
       messages: history
