@@ -11,10 +11,10 @@ describe("catalog", () => {
 
   it("shows all three badges, with the v1 live listings", () => {
     for (const type of Object.keys(BADGES)) expect(LISTINGS.some((l) => l.type === type)).toBe(true);
-    expect(getListing("receptionist-ai")?.type).toBe("buy");
+    expect(getListing("booking-api")?.type).toBe("buy");
     expect(getListing("supabase")?.type).toBe("connect");
     expect(getListing("resend")?.type).toBe("connect");
-    expect(LISTINGS.filter((l) => l.type === "buy").map((l) => l.slug)).toEqual(["receptionist-ai"]);
+    expect(LISTINGS.filter((l) => l.type === "buy").map((l) => l.slug)).toEqual(["booking-api"]);
   });
 
   it("never uses 'App Store' or 'PayPal' as a listing name", () => {
@@ -31,8 +31,8 @@ describe("price card", () => {
   });
 
   it("estimates usage from the table", () => {
-    expect(monthlyEstimateMicros({ "receptionist.message": 10, "receptionist.booking": 2 })).toBe(
-      10 * PRICES["receptionist.message"].micros + 2 * PRICES["receptionist.booking"].micros,
+    expect(monthlyEstimateMicros({ "booking.message": 10, "booking.created": 2 })).toBe(
+      10 * PRICES["booking.message"].micros + 2 * PRICES["booking.created"].micros,
     );
   });
 });

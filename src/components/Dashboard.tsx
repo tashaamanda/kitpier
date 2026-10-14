@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, usd } from "@/lib/client";
+import { DRAFT_KEY } from "./BuildBox";
 
 type P = { id: string; name: string; description: string };
 
@@ -18,6 +19,18 @@ export default function Dashboard({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  // Text typed into "What are you building?" before signing in.
+  useEffect(() => {
+    try {
+      const d = sessionStorage.getItem(DRAFT_KEY);
+      if (d) {
+        sessionStorage.removeItem(DRAFT_KEY);
+        setTimeout(() => setDraft(d), 0);
+      }
+    } catch {}
+  }, []);
 
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -70,17 +83,19 @@ export default function Dashboard({
         ))}
         {projects.length === 0 && <li className="text-muted">No projects yet.</li>}
       </ul>
-      <form onSubmit={create} className="space-y-2 rounded-2xl border border-line bg-card p-4">
+      <form key={draft} onSubmit={create} className="space-y-2 rounded-2xl border border-line bg-card p-4">
         <input
           name="name"
           required
           maxLength={80}
+          defaultValue={draft.slice(0, 60)}
           placeholder="Project name (e.g. Barbershop bookings)"
           className="w-full rounded-xl border border-line bg-paper px-3 py-2"
         />
         <input
           name="description"
           maxLength={500}
+          defaultValue={draft}
           placeholder="What are you building?"
           className="w-full rounded-xl border border-line bg-paper px-3 py-2"
         />

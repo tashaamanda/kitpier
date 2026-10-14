@@ -74,7 +74,7 @@ export default async function ListingPage({ params }: PageProps<"/catalog/[slug]
               {l.monthlyMicros !== undefined && (
                 <p className="text-muted">
                   Typical small booking site: about {usd(l.monthlyMicros)}/month (
-                  {TYPICAL_MONTH["receptionist.message"]} messages, {TYPICAL_MONTH["receptionist.booking"]} bookings).
+                  {TYPICAL_MONTH["booking.message"]} messages, {TYPICAL_MONTH["booking.created"]} bookings).
                 </p>
               )}
               <p className="text-muted">Enforced: spending stops at your project budget. Price card {PRICE_CARD_VERSION}.</p>

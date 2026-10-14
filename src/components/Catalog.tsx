@@ -31,9 +31,7 @@ export function ListingCard({ l }: { l: Listing }) {
   return (
     <Link
       href={`/catalog/${l.slug}`}
-      className={`flex h-full flex-col gap-3 rounded-2xl border border-line bg-card p-4 hover:border-accent ${
-        l.type === "soon" ? "opacity-70" : ""
-      }`}
+      className="flex h-full flex-col gap-3 rounded-2xl border border-line bg-card p-4 hover:border-accent"
     >
       <div className="flex items-center gap-3">
         <Monogram name={l.name} />
@@ -43,8 +41,12 @@ export function ListingCard({ l }: { l: Listing }) {
         </div>
       </div>
       <p className="flex-1 text-sm">{l.tagline}</p>
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Badge type={l.type} />
+        <span className="text-sm text-muted">
+          {l.priceSummary}
+          {l.type === "buy" ? " · budget enforced" : l.type === "connect" ? " · estimate" : ""}
+        </span>
       </div>
     </Link>
   );
