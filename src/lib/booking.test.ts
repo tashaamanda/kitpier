@@ -20,6 +20,7 @@ const { bookingTurn, confirmBooking, requestBookingCode } = await import("./book
 const { zonedToUtc } = await import("./slots");
 const { verifyCode } = await import("./email");
 const { claimBooking, reserveTurn, settleTurn, TURN_MAX_MICROS } = await import("./billing");
+const { createKey, revokeKeys } = await import("./apikeys");
 
 const A = { userId: "usr_a", projectId: "prj_a" };
 const B = { userId: "usr_b", projectId: "prj_b" };
@@ -59,7 +60,7 @@ function nextTuesday() {
 
 beforeEach(async () => {
   await pool.query(
-    "TRUNCATE email_codes, email_sends, turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
+    "TRUNCATE api_keys, email_codes, email_sends, turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
   );
   for (const s of [A, B]) {
     await pool.query("INSERT INTO users (id, email, name, password_hash) VALUES ($1, $1, $1, 'x')", [s.userId]);
@@ -325,5 +326,58 @@ describe("billing", () => {
     expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 50_000); // booking recorded, no message usage recorded
     const d = (await pool.query("SELECT exposure_micros FROM platform_daily_spend")).rows[0];
     expect(d.exposure_micros).toBe(1000);
+  });
+});
+
+describe("Booking API for the builder's own server (/v1/booking/*)", () => {
+  const call = async (path: "converse" | "confirm" | "code", key: string | null, body: unknown) => {
+    const { POST } = await import(`../app/v1/booking/${path}/route`);
+    const res: Response = await POST(
+      new Request(`http://x/v1/booking/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) },
+        body: JSON.stringify(body),
+      }),
+    );
+    return { status: res.status, json: await res.json() };
+  };
+
+  it("books end to end with a key: converse → card → confirm → row in the business's Supabase", async () => {
+    const { key } = await createKey(A);
+    script = propose(nextTuesday());
+    const t = await call("converse", key, { conversationId: null, requestId: rid(), message: "Haircut Tuesday 10am", customerIp: "9.9.9.9" });
+    expect(t.status).toBe(200);
+    expect(t.json.pending).toMatchObject({ service: "Haircut" });
+    const c = await call("confirm", key, { conversationId: t.json.conversationId, pendingId: t.json.pending.id, requestId: rid() });
+    expect(c.json.booked).toBe(true);
+    expect(rows).toHaveLength(1);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 70_000);
+    const k = (await pool.query("SELECT last_used_at, secret_hash FROM api_keys")).rows[0];
+    expect(k.last_used_at).not.toBeNull();
+    expect(k.secret_hash.toString("utf8")).not.toContain(key.split("_")[2]); // only a hash is stored
+  });
+
+  it("no key, malformed, wrong secret, revoked or replaced keys are all 401, checked before the body", async () => {
+    const { key: old } = await createKey(A);
+    const { key } = await createKey(A); // replaces the old one
+    const wrong = key.slice(0, -4) + (key.endsWith("AAAA") ? "BBBB" : "AAAA");
+    for (const k of [null, "mk_nope", "sk_live_123", wrong, old])
+      expect((await call("converse", k, { garbage: true })).status).toBe(401);
+    await revokeKeys(A);
+    expect((await call("converse", key, { garbage: true })).status).toBe(401);
+  });
+
+  it("a key reaches only its own project's booking page", async () => {
+    await pool.query("INSERT INTO widgets (id, user_id, project_id, business_name, services, timezone) VALUES ('w_b', $1, $2, 'B', '[\"Cut\"]', $3)", [B.userId, B.projectId, TZ]);
+    const { key: keyB } = await createKey(B);
+    script = propose(nextTuesday());
+    const t = await turn("Haircut Tuesday 10am"); // A's hosted-page conversation
+    const c = await call("confirm", keyB, { conversationId: t.conversationId, pendingId: t.pending!.id, requestId: rid() });
+    expect(c.json.booked).toBeFalsy();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("can't create a key before the booking page exists", async () => {
+    await expect(createKey(B)).rejects.toMatchObject({ status: 409 });
   });
 });
