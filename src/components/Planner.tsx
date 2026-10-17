@@ -227,8 +227,14 @@ function TopUpCard({ t, projectId, onPaid }: { t: TopUp; projectId: string; onPa
     <div className="space-y-3 rounded-2xl border border-accent p-4">
       <p className="font-semibold">{t.status === "paid" ? "Top-up paid ✓" : `Add ${usd(t.amount_micros)} with PayPal`}</p>
       <ul className="space-y-1 text-sm">
-        <li>{usd(t.amount_micros)} of Kitpier credits</li>
-        {t.budget_raise_micros > 0 && <li>Your monthly budget goes up by {usd(t.budget_raise_micros)}, so the credits can be used this month</li>}
+        <li>{usd(t.amount_micros)} of Kitpier credits{t.status === "paid" ? " added" : ""}</li>
+        {t.budget_raise_micros > 0 && (
+          <li>
+            {t.status === "paid"
+              ? `Your monthly budget went up by ${usd(t.budget_raise_micros)}`
+              : `Your monthly budget goes up by ${usd(t.budget_raise_micros)}, so the credits can be used this month`}
+          </li>
+        )}
       </ul>
       {t.status === "paid" ? (
         <p className="text-sm text-accent">Bookings are back on.</p>
