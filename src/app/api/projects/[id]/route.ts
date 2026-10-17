@@ -1,4 +1,5 @@
 import { many, one, pool } from "@/lib/db";
+import { demoConfig } from "@/lib/demo";
 import { route } from "@/lib/http";
 import { requireProjectOwner } from "@/lib/projects";
 import { requireUser } from "@/lib/session";
@@ -22,10 +23,11 @@ export const GET = route(async (_req: Request, ctx: { params: Promise<{ id: stri
     "SELECT kind, meta, created_at FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind IN ('supabase_oauth', 'resend_send_key')",
     [user.id, project.id],
   );
-  const databaseReady = !!(await one(
+  const demo = !!project.demo_connection;
+  const databaseReady = demo || !!(await one(
     pool,
     "SELECT 1 FROM provision_jobs WHERE user_id = $1 AND project_id = $2 AND state = 'schema_ready'",
     [user.id, project.id],
   ));
-  return { project, ledger, orders, connections, databaseReady };
+  return { project, ledger, orders, connections, databaseReady, demo, demoAvailable: !!demoConfig() };
 });

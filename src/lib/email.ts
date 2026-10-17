@@ -1,6 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { getCredential } from "./credentials";
 import { newId, one, pool } from "./db";
+import { captureMail, isDemo } from "./demo";
 import { rateLimit } from "./http";
 import { HttpError } from "./session";
 
@@ -23,10 +24,21 @@ function codeHash(pendingId: string, email: string, code: string) {
 const recipientKey = (email: string) => createHmac("sha256", "kitpier-rl").update(email.toLowerCase()).digest("hex").slice(0, 24);
 
 export async function emailConnected(s: Scope) {
+  if (await isDemo(pool, s)) return true;
   return !!(await one(pool, "SELECT 1 FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind = 'resend_send_key'", [s.userId, s.projectId]));
 }
 
 async function send(s: Scope, conversationId: string, kind: "code" | "confirmation", business: string, to: string, subject: string, text: string) {
+  if (await isDemo(pool, s)) {
+    const row = await one<{ id: number }>(
+      pool,
+      "INSERT INTO email_sends (project_id, conversation_id, kind, status) VALUES ($1, $2, $3, 'sent') ON CONFLICT DO NOTHING RETURNING id",
+      [s.projectId, conversationId, kind],
+    );
+    if (!row) return "duplicate" as const;
+    await captureMail(s.projectId, conversationId, kind, to, subject, text);
+    return "sent" as const;
+  }
   const cred = await getCredential(s, "resend_send_key");
   if (!cred) throw new HttpError(409, "This business hasn't set up email yet");
   const domain = (cred.meta as { verified_domains?: string[] }).verified_domains?.[0];

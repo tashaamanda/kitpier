@@ -21,10 +21,14 @@ const { zonedToUtc } = await import("./slots");
 const { verifyCode } = await import("./email");
 const { claimBooking, reserveTurn, settleTurn, TURN_MAX_MICROS } = await import("./billing");
 const { createKey, revokeKeys } = await import("./apikeys");
+const { demoInbox, setDemo } = await import("./demo");
 
 const A = { userId: "usr_a", projectId: "prj_a" };
 const B = { userId: "usr_b", projectId: "prj_b" };
 const REF = "abcdefghijklmnopqrst";
+const DEMO_REF = "demodemodemodemodemo";
+process.env.DEMO_SUPABASE_REF = DEMO_REF;
+process.env.DEMO_SUPABASE_SECRET_KEY = "sb_secret_demo";
 const TZ = "Asia/Makassar";
 const msg = (text: string) => ({ content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 1000, output_tokens: 100 } });
 const run = (tools: Tool[], name: string, input: unknown) => tools.find((t) => t.name === name)!.run(input);
@@ -38,6 +42,7 @@ function supabase(url: string, init?: RequestInit) {
     emails.push(JSON.parse(String(init?.body)));
     return Promise.resolve(new Response(JSON.stringify({ id: `em_${emails.length}` }), { status: 200 }));
   }
+  if (u.hostname.startsWith(DEMO_REF)) return demoTable(u, init);
   if (!u.hostname.startsWith(REF)) return Promise.resolve(new Response("{}", { status: 404 }));
   if (init?.method === "POST") {
     const row = JSON.parse(String(init.body));
@@ -51,6 +56,22 @@ function supabase(url: string, init?: RequestInit) {
   return Promise.resolve(new Response(JSON.stringify(match.map((r) => ({ starts_at: r.starts_at }))), { status: 200 }));
 }
 
+// Fake shared demo table: rows carry their Kitpier project; unique per (project, starts_at).
+let demoRows: { project: string; starts_at: string; name: string; contact: string; service: string }[] = [];
+let demoHits: string[] = [];
+function demoTable(u: URL, init?: RequestInit) {
+  demoHits.push(`${init?.method ?? "GET"} ${u.search}`);
+  if (init?.method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+  if (init?.method === "POST") {
+    const row = JSON.parse(String(init.body));
+    if (demoRows.some((r) => r.project === row.project && r.starts_at === row.starts_at)) return Promise.resolve(new Response("{}", { status: 409 }));
+    demoRows.push(row);
+    return Promise.resolve(new Response(null, { status: 201 }));
+  }
+  const project = u.searchParams.get("project")?.slice(3);
+  return Promise.resolve(new Response(JSON.stringify(demoRows.filter((r) => r.project === project)), { status: 200 }));
+}
+
 // A future Tuesday, in the window the slot rules allow.
 function nextTuesday() {
   const d = new Date(Date.now() + 2 * 86_400_000);
@@ -60,7 +81,7 @@ function nextTuesday() {
 
 beforeEach(async () => {
   await pool.query(
-    "TRUNCATE api_keys, email_codes, email_sends, turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
+    "TRUNCATE demo_mail, api_keys, email_codes, email_sends, turn_requests, conversation_messages, conversations, widgets, usage_events, reservations, ledger_entries, user_balances, platform_daily_spend, provision_jobs, managed_supabase_refs, credentials, rate_limits, projects, users CASCADE",
   );
   for (const s of [A, B]) {
     await pool.query("INSERT INTO users (id, email, name, password_hash) VALUES ($1, $1, $1, 'x')", [s.userId]);
@@ -72,6 +93,8 @@ beforeEach(async () => {
   await post(pool, { userId: A.userId, source: "capture:test", kind: "purchase", amountMicros: 10_000_000 });
   rows = [];
   emails = [];
+  demoRows = [];
+  demoHits = [];
   vi.stubGlobal("fetch", vi.fn(supabase));
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -379,5 +402,51 @@ describe("Booking API for the builder's own server (/v1/booking/*)", () => {
 
   it("can't create a key before the booking page exists", async () => {
     await expect(createKey(B)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe("judge demo connection", () => {
+  it("books into the shared demo table scoped to the project, and captures emails instead of sending them", async () => {
+    await setDemo(A, true);
+    script = propose(nextTuesday());
+    const t = await turn("Haircut Tuesday 10am");
+    expect(t.emailAvailable).toBe(true); // no Resend connected, but the demo inbox stands in
+    expect(await requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1")).toMatchObject({ demo: true });
+    const inbox1 = await demoInbox(A);
+    const code = inbox1.mail[0].body.match(/\d{6}/)![0];
+    const c = await confirm(t.conversationId, t.pending!.id, rid(), code);
+    expect(c.booked).toBe(true);
+
+    expect(rows).toHaveLength(0); // the business's own Supabase is untouched
+    expect(demoRows).toEqual([expect.objectContaining({ project: A.projectId, service: "Haircut" })]);
+    expect(emails).toHaveLength(0); // nothing went to Resend
+    expect(demoHits.filter((h) => h.startsWith("GET")).every((h) => h.includes(`project=eq.${A.projectId}`))).toBe(true);
+    const inbox = await demoInbox(A);
+    expect(inbox.mail.map((m) => m.kind)).toEqual(["confirmation", "code"]);
+    expect(inbox.bookings).toHaveLength(1);
+  });
+
+  it("projects can't see or block each other's demo bookings", async () => {
+    await pool.query("INSERT INTO widgets (id, user_id, project_id, business_name, services, timezone) VALUES ('w_b', $1, $2, 'B', '[\"Haircut\"]', $3)", [B.userId, B.projectId, TZ]);
+    await post(pool, { userId: B.userId, source: "capture:b", kind: "purchase", amountMicros: 10_000_000 });
+    await setDemo(A, true);
+    await setDemo(B, true);
+    const date = nextTuesday();
+    script = propose(date);
+    const a = await turn("Haircut Tuesday 10am");
+    await confirm(a.conversationId, a.pending!.id);
+    script = propose(date);
+    const b = await turn("Haircut Tuesday 10am", null, rid(), "w_b"); // same slot, other project: still free
+    expect(b.pending).toBeTruthy();
+    expect((await demoInbox(B)).bookings).toHaveLength(0);
+    expect((await demoInbox(A)).bookings).toHaveLength(1);
+    expect((await demoInbox(B)).mail).toHaveLength(0);
+  });
+
+  it("can't be switched on when the demo project isn't configured", async () => {
+    const ref = process.env.DEMO_SUPABASE_REF;
+    delete process.env.DEMO_SUPABASE_REF;
+    await expect(setDemo(A, true)).rejects.toMatchObject({ status: 503 });
+    process.env.DEMO_SUPABASE_REF = ref;
   });
 });

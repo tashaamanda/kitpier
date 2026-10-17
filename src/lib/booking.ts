@@ -5,6 +5,7 @@ import { z } from "zod";
 import { PRICES } from "./pricecard";
 import { claimBooking, recordTurnUsage, releaseBooking, reserveTurn, settleTurn } from "./billing";
 import { getCredential } from "./credentials";
+import { demoConfig, supabaseHeaders, isDemo, sweepDemoBookings } from "./demo";
 import { emailConnected, sendCode, sendConfirmation, verifyCode } from "./email";
 import { many, newId, one, pool, tx } from "./db";
 import { rateLimit } from "./http";
@@ -93,30 +94,42 @@ export async function createWidgetTx(c: Parameters<Parameters<typeof tx>[0]>[0],
 // --- The business's own Supabase (managed table only) ---
 
 async function database(s: Scope) {
+  if (await isDemo(pool, s)) {
+    const d = demoConfig();
+    if (!d) throw new HttpError(409, "The demo connection isn't available right now");
+    return bookingsTable(d.url, d.key, s.projectId);
+  }
   const cred = await getCredential(s, "supabase_secret_key");
   const ref = (cred?.meta as { ref?: string } | undefined)?.ref;
   if (!cred || !ref) throw new HttpError(409, "This business's database isn't set up yet");
   const managed = await one(pool, "SELECT 1 FROM managed_supabase_refs WHERE user_id = $1 AND project_id = $2 AND ref = $3", [s.userId, s.projectId, ref]);
   if (!managed) throw new HttpError(403, "Database not managed by Kitpier");
-  const url = `https://${ref}.supabase.co/rest/v1/bookings`;
-  const headers = { apikey: cred.secret, Authorization: `Bearer ${cred.secret}`, "Content-Type": "application/json" };
+  return bookingsTable(`https://${ref}.supabase.co/rest/v1/bookings`, cred.secret);
+}
+
+/** The managed bookings table over Supabase REST. `project` scopes every read and write (shared demo table). */
+function bookingsTable(url: string, key: string, project?: string) {
+  const headers = supabaseHeaders(key);
+  const scoped: [string, string][] = project ? [["project", `eq.${project}`]] : [];
   const signal = () => AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
   return {
     async bookedBetween(from: Date, to: Date) {
-      const q = new URLSearchParams([["select", "starts_at"], ["starts_at", `gte.${from.toISOString()}`], ["starts_at", `lt.${to.toISOString()}`]]);
+      const q = new URLSearchParams([["select", "starts_at"], ...scoped, ["starts_at", `gte.${from.toISOString()}`], ["starts_at", `lt.${to.toISOString()}`]]);
       const r = await fetch(`${url}?${q}`, { headers, signal: signal() });
       if (!r.ok) throw new HttpError(502, "Couldn't read the schedule");
       return ((await r.json()) as { starts_at: string }[]).map((b) => new Date(b.starts_at));
     },
     /** Same slot and same contact already saved: a retry whose earlier insert succeeded. */
     async exists(row: { contact: string; starts_at: string }) {
-      const q = new URLSearchParams([["select", "id"], ["starts_at", `eq.${row.starts_at}`], ["contact", `eq.${row.contact}`]]);
+      const q = new URLSearchParams([["select", "id"], ...scoped, ["starts_at", `eq.${row.starts_at}`], ["contact", `eq.${row.contact}`]]);
       const r = await fetch(`${url}?${q}`, { headers, signal: signal() });
       if (!r.ok) throw new HttpError(502, "Couldn't read the schedule");
       return ((await r.json()) as unknown[]).length > 0;
     },
     async insert(row: { name: string; contact: string; service: string; starts_at: string }) {
-      const r = await fetch(url, { method: "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify(row), signal: signal() });
+      if (project) await sweepDemoBookings();
+      const body = JSON.stringify(project ? { ...row, project } : row);
+      const r = await fetch(url, { method: "POST", headers: { ...headers, Prefer: "return=minimal" }, body, signal: signal() });
       if (r.status === 409) return "taken" as const;
       if (!r.ok) throw new HttpError(502, "Couldn't save the booking");
       return "ok" as const;
@@ -463,5 +476,5 @@ export async function requestBookingCode(widgetId: string, conversationId: strin
   if (!c || c.booked || !c.pending || c.pending.id !== pendingId) throw new HttpError(409, "Those details changed. Please check the latest card.");
   if (!(await emailConnected(s))) throw new HttpError(409, "This business hasn't set up email yet");
   await sendCode(s, w, c.id, c.pending, ip);
-  return { sent: true, to: c.pending.email };
+  return { sent: true, to: c.pending.email, demo: await isDemo(pool, s) };
 }

@@ -120,21 +120,23 @@ export async function approveStack(s: Scope, proposalId: string) {
 
 /** Counts and states only: never free text (SPEC §8). */
 export async function projectStatus(q: Db, s: Scope) {
-  const r = await one<{ supabase: boolean; resend: boolean; db: boolean; budget: number | null; stack: string | null }>(
+  const r = await one<{ supabase: boolean; resend: boolean; db: boolean; demo: boolean; budget: number | null; stack: string | null }>(
     q,
     `SELECT EXISTS (SELECT 1 FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind = 'supabase_oauth') AS supabase,
             EXISTS (SELECT 1 FROM credentials WHERE user_id = $1 AND project_id = $2 AND kind = 'resend_send_key') AS resend,
             EXISTS (SELECT 1 FROM provision_jobs WHERE user_id = $1 AND project_id = $2 AND state = 'schema_ready') AS db,
             (SELECT budget_micros FROM projects WHERE id = $2 AND user_id = $1) AS budget,
+            COALESCE((SELECT demo_connection FROM projects WHERE id = $2 AND user_id = $1), false) AS demo,
             (SELECT status FROM stack_proposals WHERE user_id = $1 AND project_id = $2 AND status <> 'superseded'
               ORDER BY (status = 'approved') DESC, created_at DESC LIMIT 1) AS stack`,
     [s.userId, s.projectId],
   );
   return {
     credits_usd: (await postedBalance(q, s.userId)) / 1_000_000,
-    supabase_connected: !!r?.supabase,
-    resend_connected: !!r?.resend,
-    database_ready: !!r?.db,
+    demo_connection: !!r?.demo, // judges' stand-in for Supabase + Resend
+    supabase_connected: !!r?.supabase || !!r?.demo,
+    resend_connected: !!r?.resend || !!r?.demo,
+    database_ready: !!r?.db || !!r?.demo,
     stack: r?.stack ?? "none",
     monthly_budget_usd: r?.budget == null ? null : r.budget / 1_000_000,
     booking_paused: await bookingPause(q, s),

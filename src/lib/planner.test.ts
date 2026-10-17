@@ -98,7 +98,7 @@ describe("planner", () => {
       called = true;
       yield msg("x");
     };
-    await pool.query("INSERT INTO platform_daily_spend (day, committed_micros) VALUES (CURRENT_DATE, $1)", [1_000_000 - PLANNER_RESERVE + 1]);
+    await pool.query("INSERT INTO platform_daily_spend (day, committed_micros) VALUES ($1, $2)", [new Date().toISOString().slice(0, 10), 1_000_000 - PLANNER_RESERVE + 1]);
     await expect(runPlanner(A, "hi")).rejects.toMatchObject({ status: 503 });
     expect(called).toBe(false);
   });

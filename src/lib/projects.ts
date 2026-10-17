@@ -8,6 +8,7 @@ export type Project = {
   description: string;
   budget_micros: number | null;
   daily_cap_micros: number;
+  demo_connection: boolean;
   created_at: string;
 };
 

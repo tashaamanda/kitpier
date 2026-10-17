@@ -32,6 +32,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
   const [pending, setPending] = useState<Pending | null>(null);
   const [emailAvailable, setEmailAvailable] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+  const [demoMail, setDemoMail] = useState(false); // demo connection: the email shows in the owner's Demo inbox
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -113,7 +114,8 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
                       setBusy(true);
                       setCodeError(null);
                       try {
-                        await api(`/r/${widgetId}/code`, { body: { conversationId, pendingId: pending.id } });
+                        const r = await api<{ demo?: boolean }>(`/r/${widgetId}/code`, { body: { conversationId, pendingId: pending.id } });
+                        setDemoMail(!!r.demo);
                         setCodeSent(true);
                       } catch (e) {
                         setCodeError((e as Error).message);
@@ -126,7 +128,11 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
                   </button>
                 ) : (
                   <label className="block space-y-1">
-                    <span className="text-muted">Enter the 6-digit code we sent to {pending.email}</span>
+                    <span className="text-muted">
+                      {demoMail
+                        ? "Demo: the code email is in the Demo inbox on this business's Kitpier project page."
+                        : `Enter the 6-digit code we sent to ${pending.email}`}
+                    </span>
                     <input
                       value={code}
                       onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
