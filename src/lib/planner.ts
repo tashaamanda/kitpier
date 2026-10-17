@@ -5,7 +5,9 @@ import { CATEGORIES } from "./catalog";
 import { many, pool } from "./db";
 import { costMicros, recordPlatformUsage, reservePlatform, settlePlatform } from "./platform";
 import { HttpError } from "./session";
+import { PACK_IDS } from "./packs";
 import { estimateCost, projectStatus, proposeStack, searchCatalog, type Scope } from "./stack";
+import { proposeTopUp } from "./topup";
 
 // "What are you building?" planner (SPEC §8). One agent, tools are closures over the session's (user, project),
 // no money tools, no approval tools. Platform-paid and metered against the daily cap.
@@ -34,7 +36,9 @@ How to work:
 - Give each item a one-sentence reason tied to what the user said.
 - Pass the user's stated monthly budget (in USD) to propose_stack if they gave one.
 - Explain money honestly: "Buy with PayPal" services are paid from Kitpier credits and Kitpier enforces the project budget. "Connect" services are billed by the provider directly; those numbers are estimates and Kitpier does not control them.
+- If get_project_status shows booking_paused, online booking has stopped. Explain why in one plain sentence: "credits" means the Kitpier credits ran out, "budget" means this month's project budget is used up, "daily_limit" means the project's daily spending limit is reached (it resets tomorrow, no top-up needed), "on_hold" means the account is on hold (they should contact Kitpier support). For "credits" or "budget", propose a top-up with propose_top_up (p10 = $10 unless the user asks for more). When the user says bookings stopped or asks about credits, check get_project_status first.
 - You cannot buy, connect, approve or change anything. After proposing, tell the user to review the stack card below your reply and press Approve; buying credits and connecting accounts happen on the project page after that.
+- A top-up card only shows a PayPal button. The user pays in PayPal checkout; you never take payment.
 - Never invent numbers. Only quote usage and prices that a tool returned.
 - Keep replies short (under 120 words) and in plain language. Plain text only: no markdown, no asterisks, no headings, no tables.
 
@@ -105,8 +109,24 @@ function tools(s: Scope, onProposal: (id: string) => void) {
       },
     }),
     betaZodTool({
+      name: "propose_top_up",
+      description: "Show the user a top-up card with a PayPal button, for when booking is paused because credits or the monthly budget ran out. Replaces any earlier unpaid top-up card. The amount and budget change are set by the server.",
+      inputSchema: z.object({ pack: z.enum(PACK_IDS).describe("p10 = $10, p25 = $25, p50 = $50") }),
+      run: async (i) => {
+        const t = await proposeTopUp(s, i.pack);
+        onProposal(t.id);
+        return JSON.stringify({
+          shown_to_user: true,
+          credits_usd: t.amount_micros / 1e6,
+          monthly_budget_raised_by_usd: t.budget_raise_micros / 1e6,
+          new_monthly_budget_usd: t.new_budget_micros == null ? null : t.new_budget_micros / 1e6,
+          next_step: "The user presses the PayPal button on the card. Bookings resume once the payment is verified.",
+        });
+      },
+    }),
+    betaZodTool({
       name: "get_project_status",
-      description: "This project's setup state: credits, connected accounts, stack status, monthly budget.",
+      description: "This project's state: credits, connected accounts, stack status, monthly budget, and booking_paused (null when bookings are running).",
       inputSchema: z.object({}),
       run: async () => JSON.stringify(await projectStatus(pool, s)),
     }),
@@ -167,6 +187,7 @@ export async function runPlanner(s: Scope, userText: string) {
     .trim();
   // Replies render as plain text: drop markdown emphasis and heading marks the model sometimes adds anyway.
   text = text.replace(/\*\*|__/g, "").replace(/^#{1,6}\s+/gm, "");
+  if (!text && (proposalId as string | null)?.startsWith("top_")) text = "Your booking page is paused. Add credits with PayPal on the card below to resume.";
   if (!text) text = proposalId ? "Here's a stack for your project. Review it and press Approve." : "Sorry, I couldn't plan that. Could you describe what you're building in a sentence or two?";
   await pool.query(
     "INSERT INTO plan_messages (user_id, project_id, role, body, proposal_id) VALUES ($1, $2, 'assistant', $3, $4)",

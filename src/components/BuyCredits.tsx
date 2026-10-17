@@ -11,8 +11,22 @@ const PACKS = [
   { id: "p50", micros: 50_000_000 },
 ] as const;
 
-export default function BuyCredits({ projectId, onPaid }: { projectId: string; onPaid: () => void }) {
-  const [pack, setPack] = useState<(typeof PACKS)[number]["id"]>("p10");
+type PackId = (typeof PACKS)[number]["id"];
+
+/** With topUpId, the pack is fixed by the assistant's top-up card and the picker is hidden. */
+export default function BuyCredits({
+  projectId,
+  onPaid,
+  fixedPack,
+  topUpId,
+}: {
+  projectId: string;
+  onPaid: () => void;
+  fixedPack?: PackId;
+  topUpId?: string;
+}) {
+  const [picked, setPack] = useState<PackId>("p10");
+  const pack = fixedPack ?? picked;
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   if (!CLIENT_ID)
@@ -20,6 +34,7 @@ export default function BuyCredits({ projectId, onPaid }: { projectId: string; o
 
   return (
     <div className="space-y-3">
+      {!fixedPack && (
       <div className="grid grid-cols-3 gap-2">
         {PACKS.map((p) => (
           <button
@@ -32,6 +47,7 @@ export default function BuyCredits({ projectId, onPaid }: { projectId: string; o
           </button>
         ))}
       </div>
+      )}
       <PayPalScriptProvider options={{ clientId: CLIENT_ID, currency: "USD", intent: "capture" }}>
         <PayPalButtons
           forceReRender={[pack]}
@@ -40,7 +56,7 @@ export default function BuyCredits({ projectId, onPaid }: { projectId: string; o
           createOrder={async () => {
             setMsg(null);
             const { paypalOrderId } = await api<{ paypalOrderId: string }>("/api/orders", {
-              body: { projectId, pack },
+              body: { projectId, pack, topUpId },
             });
             return paypalOrderId;
           }}

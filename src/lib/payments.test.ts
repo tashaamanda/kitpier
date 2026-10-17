@@ -10,7 +10,9 @@ const { pool } = await import("./db");
 const paypal = await import("./paypal");
 const { applyVerifiedOrder, captureForUser } = await import("./orders");
 const { handleVerifiedEvent } = await import("./webhooks");
-const { postedBalance } = await import("./ledger");
+const { post, postedBalance } = await import("./ledger");
+const { bookingPause } = await import("./billing");
+const { claimTopUpForOrder, proposeTopUp } = await import("./topup");
 
 const userA = { id: "usr_a", email: "a@test", name: "A", frozen: false };
 const userB = { id: "usr_b", email: "b@test", name: "B", frozen: false };
@@ -56,7 +58,7 @@ const balance = (u = userA) => postedBalance(pool, u.id);
 
 beforeEach(async () => {
   await pool.query(
-    "TRUNCATE ledger_entries, orders, webhook_events, refund_requests, usage_events, reservations, user_balances, rate_limits, projects, users CASCADE",
+    "TRUNCATE ledger_entries, orders, top_up_proposals, webhook_events, refund_requests, usage_events, reservations, user_balances, rate_limits, projects, users CASCADE",
   );
   for (const u of [userA, userB]) {
     await pool.query("INSERT INTO users (id, email, name, password_hash) VALUES ($1, $2, $3, 'x')", [
@@ -218,5 +220,66 @@ describe("money parsing", () => {
     expect(paypal.valueToMicros("10.00")).toBe(10_000_000);
     expect(paypal.valueToMicros("0.07")).toBe(70_000);
     expect(paypal.valueToMicros("9.99")).toBe(9_990_000);
+  });
+});
+
+describe("§3.6 recovery: paused → agent-proposed top-up → PayPal → resumes", () => {
+  const A = { userId: userA.id, projectId: `prj_${userA.id}` };
+
+  async function seedTopUpOrder(id: string, topUpId: string) {
+    const { budgetRaiseMicros } = await claimTopUpForOrder(pool, A, topUpId, "p10");
+    await pool.query(
+      `INSERT INTO orders (id, paypal_order_id, user_id, project_id, pack_id, amount_micros, top_up_id, budget_raise_micros)
+       VALUES ($1, $2, $3, $4, 'p10', 10000000, $5, $6)`,
+      [id, `PP_${id}`, A.userId, A.projectId, topUpId, budgetRaiseMicros],
+    );
+  }
+  const budget = async () => (await pool.query("SELECT budget_micros FROM projects WHERE id = $1", [A.projectId])).rows[0].budget_micros;
+
+  it("explains the pause: credits, then budget, then running again after the top-up", async () => {
+    await pool.query("UPDATE projects SET budget_micros = 1000000 WHERE id = $1", [A.projectId]);
+    expect(await bookingPause(pool, A)).toBe("credits");
+    await post(pool, { userId: A.userId, source: "capture:seed", kind: "purchase", amountMicros: 5_000_000 });
+    await post(pool, { userId: A.userId, projectId: A.projectId, source: "usage:seed", kind: "usage", amountMicros: -1_000_000 });
+    expect(await bookingPause(pool, A)).toBe("budget");
+
+    const t = await proposeTopUp(A, "p10");
+    expect(t).toMatchObject({ amount_micros: 10_000_000, budget_raise_micros: 10_000_000, new_budget_micros: 11_000_000 });
+    await seedTopUpOrder("ord_t", t.id);
+    vi.mocked(paypal.getOrder).mockResolvedValue(ppOrder({ orderId: "ord_t" }));
+    await applyVerifiedOrder("ord_t", ppOrder({ orderId: "ord_t" }));
+    await applyVerifiedOrder("ord_t", ppOrder({ orderId: "ord_t" }));
+    await handleVerifiedEvent({
+      id: "WH-T",
+      event_type: "PAYMENT.CAPTURE.COMPLETED",
+      resource: { id: "CAP_ord_t", supplementary_data: { related_ids: { order_id: "PP_ord_t" } } },
+    });
+
+    expect(await budget()).toBe(11_000_000); // raised exactly once
+    expect(await balance()).toBe(14_000_000);
+    expect(await bookingPause(pool, A)).toBeNull();
+    const card = (await pool.query("SELECT status, order_id FROM top_up_proposals WHERE id = $1", [t.id])).rows[0];
+    expect(card).toEqual({ status: "paid", order_id: "ord_t" });
+  });
+
+  it("a card can't be paid twice, by another user, for another pack, or after a newer card", async () => {
+    await pool.query("UPDATE projects SET budget_micros = 1000000 WHERE id = $1", [A.projectId]);
+    const old = await proposeTopUp(A, "p10");
+    const t = await proposeTopUp(A, "p10");
+    await expect(claimTopUpForOrder(pool, A, old.id, "p10")).rejects.toMatchObject({ status: 409 }); // superseded
+    await expect(claimTopUpForOrder(pool, A, t.id, "p50")).rejects.toMatchObject({ status: 409 });
+    await expect(claimTopUpForOrder(pool, { userId: userB.id, projectId: `prj_${userB.id}` }, t.id, "p10")).rejects.toMatchObject({ status: 409 });
+    await seedTopUpOrder("ord_t", t.id);
+    await applyVerifiedOrder("ord_t", ppOrder({ orderId: "ord_t" }));
+    await expect(claimTopUpForOrder(pool, A, t.id, "p10")).rejects.toMatchObject({ status: 409 }); // already paid
+  });
+
+  it("no budget set → credits only, budget untouched", async () => {
+    const t = await proposeTopUp(A, "p10");
+    expect(t.budget_raise_micros).toBe(0);
+    await seedTopUpOrder("ord_t", t.id);
+    await applyVerifiedOrder("ord_t", ppOrder({ orderId: "ord_t" }));
+    expect(await budget()).toBeNull();
+    expect(await balance()).toBe(10_000_000);
   });
 });

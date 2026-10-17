@@ -70,7 +70,7 @@ describe("planner", () => {
       yield msg("Here is your stack.");
     };
     await runPlanner(A, "Booking site for my barbershop");
-    expect(names.sort()).toEqual(["estimate_cost", "get_project_status", "propose_stack", "search_catalog"]);
+    expect(names.sort()).toEqual(["estimate_cost", "get_project_status", "propose_stack", "propose_top_up", "search_catalog"]);
     const msgs = (await pool.query("SELECT role, proposal_id FROM plan_messages ORDER BY id")).rows;
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
     expect(msgs[1].proposal_id).toMatch(/^stk_/);

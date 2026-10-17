@@ -2,12 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, usd } from "@/lib/client";
+import type { PauseReason } from "@/lib/billing";
 import type { Proposal } from "@/lib/stack";
+import type { TopUp } from "@/lib/topup";
+import BuyCredits from "./BuyCredits";
 import { Badge } from "./Catalog";
 
 type Msg = { id: number; role: "user" | "assistant"; body: string; proposal_id: string | null };
-type Status = { credits_usd: number; supabase_connected: boolean; resend_connected: boolean; database_ready: boolean; stack: string };
-type View = { messages: Msg[]; proposals: Proposal[]; status: Status };
+type Status = {
+  credits_usd: number;
+  supabase_connected: boolean;
+  resend_connected: boolean;
+  database_ready: boolean;
+  stack: string;
+  booking_paused: PauseReason | null;
+};
+type View = { messages: Msg[]; proposals: Proposal[]; topUps: TopUp[]; status: Status };
+
+const PAUSED: Record<PauseReason, string> = {
+  credits: "your Kitpier credits ran out",
+  budget: "this month's project budget is used up",
+  daily_limit: "today's spending limit is reached. It resets tomorrow",
+  on_hold: "your account is on hold. Please contact Kitpier support",
+};
 
 // "What are you building?" → planner chat → stack card → Approve. Text is rendered as text, never HTML.
 export default function Planner({
@@ -68,8 +85,16 @@ export default function Planner({
     setBusy(false);
   }
 
+  async function paid() {
+    setView(await api<View>(`/api/projects/${projectId}/plan`));
+    onApproved();
+  }
+
   const proposals = new Map(view?.proposals.map((p) => [p.id, p]));
+  const topUps = new Map(view?.topUps.map((t) => [t.id, t]));
   const lastProposalMsg = [...(view?.messages ?? [])].reverse().find((m) => m.proposal_id && proposals.has(m.proposal_id));
+  const lastTopUpMsg = [...(view?.messages ?? [])].reverse().find((m) => m.proposal_id && topUps.has(m.proposal_id));
+  const paused = view?.status.booking_paused;
 
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-card p-5">
@@ -77,6 +102,22 @@ export default function Planner({
         <h2 className="font-semibold">What are you building?</h2>
         <p className="text-sm text-muted">The planner suggests services from the catalog. Nothing happens until you approve.</p>
       </div>
+      {paused && (
+        <div className="space-y-2 rounded-xl border border-danger p-3 text-sm">
+          <p>
+            <span className="font-semibold text-danger">Online booking is paused:</span> {PAUSED[paused]}.
+          </p>
+          {(paused === "credits" || paused === "budget") && (
+            <button
+              disabled={busy}
+              onClick={() => send("My booking page is paused. What should I do?")}
+              className="rounded-xl border border-line px-3 py-1 font-semibold disabled:opacity-50"
+            >
+              Ask the assistant
+            </button>
+          )}
+        </div>
+      )}
       <ul className="space-y-3">
         {view?.messages.map((m) => (
           <li key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
@@ -84,6 +125,9 @@ export default function Planner({
               <p className="whitespace-pre-wrap text-sm">{m.body}</p>
               {m.role === "assistant" && m.proposal_id === lastProposalMsg?.proposal_id && proposals.get(m.proposal_id!) && (
                 <StackCard p={proposals.get(m.proposal_id!)!} status={view.status} busy={busy} onApprove={approve} />
+              )}
+              {m.role === "assistant" && m.proposal_id === lastTopUpMsg?.proposal_id && topUps.get(m.proposal_id!) && (
+                <TopUpCard t={topUps.get(m.proposal_id!)!} projectId={projectId} onPaid={paid} />
               )}
             </div>
           </li>
@@ -173,6 +217,23 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
         >
           Approve this stack
         </button>
+      )}
+    </div>
+  );
+}
+
+function TopUpCard({ t, projectId, onPaid }: { t: TopUp; projectId: string; onPaid: () => void }) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-accent p-4">
+      <p className="font-semibold">{t.status === "paid" ? "Top-up paid ✓" : `Add ${usd(t.amount_micros)} with PayPal`}</p>
+      <ul className="space-y-1 text-sm">
+        <li>{usd(t.amount_micros)} of Kitpier credits</li>
+        {t.budget_raise_micros > 0 && <li>Your monthly budget goes up by {usd(t.budget_raise_micros)}, so the credits can be used this month</li>}
+      </ul>
+      {t.status === "paid" ? (
+        <p className="text-sm text-accent">Bookings are back on.</p>
+      ) : (
+        <BuyCredits projectId={projectId} onPaid={onPaid} fixedPack={t.pack_id} topUpId={t.id} />
       )}
     </div>
   );

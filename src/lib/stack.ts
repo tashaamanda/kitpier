@@ -1,5 +1,6 @@
 import { CATEGORIES, LISTINGS, getListing, type Listing } from "./catalog";
 import { many, newId, one, tx, type Db } from "./db";
+import { bookingPause } from "./billing";
 import { postedBalance } from "./ledger";
 import { PRICE_CARD_VERSION, TYPICAL_MONTH, monthlyEstimateMicros } from "./pricecard";
 import { HttpError } from "./session";
@@ -136,6 +137,7 @@ export async function projectStatus(q: Db, s: Scope) {
     database_ready: !!r?.db,
     stack: r?.stack ?? "none",
     monthly_budget_usd: r?.budget == null ? null : r.budget / 1_000_000,
+    booking_paused: await bookingPause(q, s),
   };
 }
 

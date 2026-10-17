@@ -5,6 +5,7 @@ import { listPlanMessages, runPlanner } from "@/lib/planner";
 import { requireProjectOwner } from "@/lib/projects";
 import { requireUser } from "@/lib/session";
 import { listProposals, projectStatus, type Scope } from "@/lib/stack";
+import { listTopUps } from "@/lib/topup";
 
 type Ctx = { params: Promise<{ id: string }> };
 const Input = z.object({ message: z.string().trim().min(1).max(2000) });
@@ -19,6 +20,7 @@ async function view(s: Scope) {
   return {
     messages: await listPlanMessages(s),
     proposals: await listProposals(pool, s),
+    topUps: await listTopUps(pool, s),
     status: await projectStatus(pool, s),
   };
 }

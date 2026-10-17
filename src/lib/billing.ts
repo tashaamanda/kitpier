@@ -1,4 +1,4 @@
-import { newId, one, pool, tx } from "./db";
+import { newId, one, pool, tx, type Db } from "./db";
 import { lockUserBalance, post, spendable } from "./ledger";
 import { costMicros } from "./platform";
 import { PRICE_CARD_VERSION, PRICES } from "./pricecard";
@@ -23,6 +23,41 @@ function dailyCap() {
   return cap;
 }
 
+type ProjectLimits = { budget_micros: number | null; daily_cap_micros: number; frozen: boolean };
+/** Why a turn costing `amount` can't run, or null. One rule set for reserveTurn and the owner's status. */
+export type PauseReason = "on_hold" | "credits" | "budget" | "daily_limit";
+
+async function pauseReason(c: Db, s: Scope, project: ProjectLimits, amount: number): Promise<PauseReason | null> {
+  if (project.frozen) return "on_hold";
+  if ((await spendable(c, s.userId)) < amount) return "credits";
+  // Project spend = posted usage debits + what open reservations could still charge.
+  const spent = await one<{ month: number; day: number }>(
+    c,
+    `SELECT
+       (COALESCE((SELECT -SUM(amount_micros) FROM ledger_entries WHERE project_id = $1 AND kind = 'usage'
+          AND created_at >= date_trunc('month', now())), 0)
+        + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS month,
+       (COALESCE((SELECT -SUM(amount_micros) FROM ledger_entries WHERE project_id = $1 AND kind = 'usage'
+          AND created_at >= date_trunc('day', now())), 0)
+        + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS day`,
+    [s.projectId],
+  );
+  if (project.budget_micros != null && (spent?.month ?? 0) + amount > project.budget_micros) return "budget";
+  if ((spent?.day ?? 0) + amount > project.daily_cap_micros) return "daily_limit";
+  return null;
+}
+
+/** Owner-facing: would the next booking turn be refused, and why. Read-only, no locks. */
+export async function bookingPause(q: Db, s: Scope) {
+  const project = await one<ProjectLimits>(
+    q,
+    `SELECT p.budget_micros, p.daily_cap_micros, u.frozen FROM projects p JOIN users u ON u.id = p.user_id
+     WHERE p.id = $1 AND p.user_id = $2`,
+    [s.projectId, s.userId],
+  );
+  return project ? pauseReason(q, s, project, TURN_MAX_MICROS) : null;
+}
+
 /** Tx1. Lock order: platform day → user balance → project (fixed, so no deadlocks). */
 export async function reserveTurn(s: Scope, conversationId: string, platformMicros: number, amount = TURN_MAX_MICROS) {
   const day = today();
@@ -38,31 +73,15 @@ export async function reserveTurn(s: Scope, conversationId: string, platformMicr
     if ((p?.used ?? 0) + platformMicros > dailyCap()) throw new HttpError(503, "Booking is busy right now. Please try again later.", "ai_capacity");
 
     await lockUserBalance(c, s.userId);
-    const project = await one<{ budget_micros: number | null; daily_cap_micros: number; frozen: boolean }>(
+    const project = await one<ProjectLimits>(
       c,
       `SELECT p.budget_micros, p.daily_cap_micros, u.frozen FROM projects p JOIN users u ON u.id = p.user_id
        WHERE p.id = $1 AND p.user_id = $2 FOR UPDATE OF p`,
       [s.projectId, s.userId],
     );
     if (!project) throw new HttpError(404, "Not found");
-    const exhausted = () => new HttpError(402, "Online booking is paused for this business right now.", "budget_exhausted");
-    if (project.frozen) throw exhausted();
-    if ((await spendable(c, s.userId)) < amount) throw exhausted();
-
-    // Project spend = posted usage debits + what open reservations could still charge.
-    const spent = await one<{ month: number; day: number }>(
-      c,
-      `SELECT
-         (COALESCE((SELECT -SUM(amount_micros) FROM ledger_entries WHERE project_id = $1 AND kind = 'usage'
-            AND created_at >= date_trunc('month', now())), 0)
-          + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS month,
-         (COALESCE((SELECT -SUM(amount_micros) FROM ledger_entries WHERE project_id = $1 AND kind = 'usage'
-            AND created_at >= date_trunc('day', now())), 0)
-          + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS day`,
-      [s.projectId],
-    );
-    if (project.budget_micros != null && (spent?.month ?? 0) + amount > project.budget_micros) throw exhausted();
-    if ((spent?.day ?? 0) + amount > project.daily_cap_micros) throw exhausted();
+    if (await pauseReason(c, s, project, amount))
+      throw new HttpError(402, "Online booking is paused for this business right now.", "budget_exhausted");
 
     const id = newId("res");
     await c.query(
