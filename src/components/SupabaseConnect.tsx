@@ -51,7 +51,7 @@ export default function SupabaseConnect({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-semibold">Supabase</p>
+          <p className="font-display text-lg">Supabase</p>
           {connection ? (
             <p className="text-sm text-muted">
               Connected{connection.meta.orgs?.length ? ` · ${connection.meta.orgs.join(", ")}` : ""}. Kitpier only changes
@@ -70,7 +70,7 @@ export default function SupabaseConnect({
           <button
             disabled={busy}
             onClick={connect}
-            className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent disabled:opacity-50"
+            className="kp-btn-outline"
           >
             Connect Supabase
           </button>

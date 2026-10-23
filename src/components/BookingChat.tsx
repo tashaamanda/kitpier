@@ -73,17 +73,19 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">{business}</h1>
-        <p className="text-sm text-muted">Book online · {services.join(" · ")}</p>
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-10">
+      <header className="grid gap-3 border-b border-line pb-5">
+        <span className="micro text-muted">Book online · {services.join(" · ")}</span>
+        <h1 className="app-title" style={{ fontSize: "clamp(34px, 6vw, 52px)" }}>
+          {business}
+        </h1>
       </header>
       <ul className="flex-1 space-y-3">
         {msgs.map((m, i) => (
           <li key={i} className={m.role === "user" ? "flex justify-end" : ""}>
             <p
               className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm ${
-                m.role === "user" ? "bg-accent text-white" : "border border-line bg-card"
+                m.role === "user" ? "bg-ink text-white" : "bg-paper"
               }`}
             >
               {m.body}
@@ -91,8 +93,8 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
           </li>
         ))}
         {pending && (
-          <li className="space-y-2 rounded-2xl border border-accent bg-card p-4 text-sm">
-            <p className="font-semibold">Check your booking</p>
+          <li className="space-y-2 kp-panel kp-panel-active text-sm">
+            <h2 className="m-0 text-xl">Check your booking</h2>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               <dt className="text-muted">Service</dt>
               <dd>{pending.service}</dd>
@@ -122,7 +124,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
                       }
                       setBusy(false);
                     }}
-                    className="text-accent underline disabled:opacity-50"
+                    className="underline disabled:opacity-50"
                   >
                     Email me a confirmation (we&apos;ll send a code first)
                   </button>
@@ -139,7 +141,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
                       inputMode="numeric"
                       autoComplete="one-time-code"
                       placeholder="123456"
-                      className="w-32 rounded-xl border border-line bg-paper px-3 py-2 tracking-widest"
+                      className="w-32 kp-input tracking-widest"
                     />
                   </label>
                 )}
@@ -149,7 +151,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
             <button
               disabled={busy || (codeSent && code.length > 0 && code.length < 6)}
               onClick={() => run(() => call(`/r/${widgetId}/confirm`, { conversationId, pendingId: pending.id, code: code.length === 6 ? code : undefined }))}
-              className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="kp-btn kp-btn-sm"
             >
               {code.length === 6 ? "Confirm and email me" : "Confirm booking"}
             </button>
@@ -165,9 +167,9 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
             onChange={(e) => setText(e.target.value)}
             maxLength={500}
             placeholder="e.g. A haircut on Tuesday at 10am"
-            className="flex-1 rounded-xl border border-line bg-card px-3 py-2"
+            className="flex-1 kp-input"
           />
-          <button disabled={busy || !text.trim()} className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <button disabled={busy || !text.trim()} className="kp-btn kp-btn-sm">
             Send
           </button>
         </form>

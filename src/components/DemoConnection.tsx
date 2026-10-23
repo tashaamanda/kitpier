@@ -27,7 +27,7 @@ export function DemoSwitch({ projectId, on, available, onChange }: { projectId: 
   }
 
   return (
-    <div className={`space-y-2 rounded-xl border p-3 text-sm ${on ? "border-accent" : "border-line bg-paper"}`}>
+    <div className={`space-y-2 text-sm ${on ? "kp-panel kp-panel-active" : "kp-note"}`}>
       {on ? (
         <>
           <p>
@@ -44,7 +44,7 @@ export function DemoSwitch({ projectId, on, available, onChange }: { projectId: 
             <span className="font-semibold">No Supabase or Resend account?</span> Try everything with Kitpier&apos;s demo connection
             instead. Nothing is created in your accounts.
           </p>
-          <button disabled={busy} onClick={() => set(true)} className="rounded-full border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50">
+          <button disabled={busy} onClick={() => set(true)} className="kp-btn-outline">
             Use demo connection
           </button>
         </>
@@ -64,13 +64,13 @@ export function DemoInbox({ projectId }: { projectId: string }) {
   }, [load]);
 
   return (
-    <section id="demo-inbox" className="space-y-4 rounded-2xl border border-line bg-card p-5">
+    <section id="demo-inbox" className="space-y-4 kp-panel">
       <div>
-        <h2 className="font-semibold">Demo inbox</h2>
+        <h2 className="text-[22px]">Demo inbox</h2>
         <p className="text-sm text-muted">What your booking page saved and emailed, live. With your own accounts these land in Supabase and Resend.</p>
       </div>
       <div className="space-y-2">
-        <p className="text-sm font-semibold">Bookings in the demo database</p>
+        <p className="font-display">Bookings in the demo database</p>
         <ul className="divide-y divide-line text-sm">
           {inbox?.bookings.map((b) => (
             <li key={b.starts_at} className="flex flex-wrap justify-between gap-2 py-2">
@@ -84,11 +84,11 @@ export function DemoInbox({ projectId }: { projectId: string }) {
         </ul>
       </div>
       <div className="space-y-2">
-        <p className="text-sm font-semibold">Sent emails (shown here, not delivered)</p>
+        <p className="font-display">Sent emails (shown here, not delivered)</p>
         <ul className="space-y-2 text-sm">
           {inbox?.mail.map((m) => (
-            <li key={m.id} className="rounded-xl border border-line bg-paper p-3">
-              <p className="font-semibold">{m.subject}</p>
+            <li key={m.id} className="kp-note">
+              <p className="font-display text-lg">{m.subject}</p>
               <p className="text-xs text-muted">
                 To {m.to_address} · {new Date(m.created_at).toLocaleTimeString()}
               </p>

@@ -97,13 +97,13 @@ export default function Planner({
   const paused = view?.status.booking_paused;
 
   return (
-    <section className="space-y-4 rounded-2xl border border-line bg-card p-5">
+    <section className="space-y-4 kp-panel">
       <div>
-        <h2 className="font-semibold">What are you building?</h2>
+        <h2 className="text-[22px]">What are you building?</h2>
         <p className="text-sm text-muted">The planner suggests services from the catalog. Nothing happens until you approve.</p>
       </div>
       {paused && (
-        <div className="space-y-2 rounded-xl border border-danger p-3 text-sm">
+        <div className="space-y-2 kp-note kp-note-danger text-sm">
           <p>
             <span className="font-semibold text-danger">Online booking is paused:</span> {PAUSED[paused]}.
           </p>
@@ -111,7 +111,7 @@ export default function Planner({
             <button
               disabled={busy}
               onClick={() => send("My booking page is paused. What should I do?")}
-              className="rounded-xl border border-line px-3 py-1 font-semibold disabled:opacity-50"
+              className="kp-btn-outline kp-btn-xs"
             >
               Ask the assistant
             </button>
@@ -147,9 +147,9 @@ export default function Planner({
           onChange={(e) => setText(e.target.value)}
           maxLength={2000}
           placeholder={view?.messages.length ? "Reply to the planner" : "A booking site for my barbershop, budget $30/month"}
-          className="flex-1 rounded-xl border border-line bg-paper px-3 py-2"
+          className="flex-1 kp-input"
         />
-        <button disabled={busy || !text.trim()} className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
+        <button disabled={busy || !text.trim()} className="kp-btn kp-btn-sm">
           Send
         </button>
       </form>
@@ -169,8 +169,8 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
   ].filter(Boolean) as { label: string; done: boolean; href: string }[];
 
   return (
-    <div className="space-y-3 rounded-2xl border border-accent p-4">
-      <p className="font-semibold">{approved ? "Your stack (approved)" : "Proposed stack"}</p>
+    <div className="space-y-3 kp-panel kp-panel-active">
+      <p className="font-display text-lg">{approved ? "Your stack (approved)" : "Proposed stack"}</p>
       <ul className="space-y-3">
         {p.items.map((i) => (
           <li key={i.slug} className="space-y-1">
@@ -213,7 +213,7 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
         <button
           disabled={busy}
           onClick={() => onApprove(p.id)}
-          className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+          className="kp-btn kp-btn-sm"
         >
           Approve this stack
         </button>
@@ -224,8 +224,8 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
 
 function TopUpCard({ t, projectId, onPaid }: { t: TopUp; projectId: string; onPaid: () => void }) {
   return (
-    <div className="space-y-3 rounded-2xl border border-accent p-4">
-      <p className="font-semibold">{t.status === "paid" ? "Top-up paid ✓" : `Add ${usd(t.amount_micros)} with PayPal`}</p>
+    <div className="space-y-3 kp-panel kp-panel-active">
+      <p className="font-display text-lg">{t.status === "paid" ? "Top-up paid ✓" : `Add ${usd(t.amount_micros)} with PayPal`}</p>
       <ul className="space-y-1 text-sm">
         <li>{usd(t.amount_micros)} of Kitpier credits{t.status === "paid" ? " added" : ""}</li>
         {t.budget_raise_micros > 0 && (
@@ -237,7 +237,7 @@ function TopUpCard({ t, projectId, onPaid }: { t: TopUp; projectId: string; onPa
         )}
       </ul>
       {t.status === "paid" ? (
-        <p className="text-sm text-accent">Bookings are back on.</p>
+        <p className="text-sm">Bookings are back on.</p>
       ) : (
         <BuyCredits projectId={projectId} onPaid={onPaid} fixedPack={t.pack_id} topUpId={t.id} />
       )}

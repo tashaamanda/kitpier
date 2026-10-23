@@ -41,7 +41,7 @@ export default function BuyCredits({
             key={p.id}
             type="button"
             onClick={() => setPack(p.id)}
-            className={`rounded-xl border px-3 py-2 text-sm font-semibold ${pack === p.id ? "border-accent bg-accent/10" : "border-line bg-card"}`}
+            className={`min-h-11 rounded-full border px-5 text-sm ${pack === p.id ? "border-ink bg-ink text-white" : "border-line bg-card"}`}
           >
             {usd(p.micros)}
           </button>
@@ -80,7 +80,7 @@ export default function BuyCredits({
           onError={(e) => setMsg({ kind: "err", text: String(e?.message ?? "PayPal couldn't complete the payment") })}
         />
       </PayPalScriptProvider>
-      {msg && <p className={`text-sm ${msg.kind === "ok" ? "text-accent" : "text-danger"}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.kind === "ok" ? "text-ink" : "text-danger"}`}>{msg.text}</p>}
       <p className="text-xs text-muted">
         Closed-loop service credits for Kitpier services. Sandbox: no real money moves.
       </p>

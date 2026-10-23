@@ -48,9 +48,9 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
     });
 
   return (
-    <section id="use-in-app" className="space-y-4 rounded-2xl border border-line bg-card p-5">
+    <section id="use-in-app" className="space-y-4 kp-panel">
       <div>
-        <h2 className="font-semibold">Use in your app</h2>
+        <h2 className="text-[22px]">Use in your app</h2>
         <p className="text-sm text-muted">
           Put this booking chat on your own website. Your site&apos;s server talks to Kitpier with a secret key. Bookings still land
           in your Supabase, emails go through your Resend, and the same prices and budget apply.
@@ -58,7 +58,7 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
       </div>
 
       <div className="space-y-2 text-sm">
-        <p className="font-semibold">1. Your secret key</p>
+        <p className="font-display text-lg">1. Your secret key</p>
         {key ? (
           <p>
             ✓ Key <code className="rounded bg-paper px-1">mk_{key.prefix}_…</code> created {new Date(key.created_at).toLocaleDateString()}
@@ -68,7 +68,7 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
           <p className="text-muted">No key yet.</p>
         )}
         <div className="flex gap-3">
-          <button disabled={busy} onClick={create} className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <button disabled={busy} onClick={create} className="kp-btn kp-btn-sm">
             {key ? "Create a new key" : "Create key"}
           </button>
           {key && (
@@ -78,7 +78,7 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
           )}
         </div>
         {fresh && (
-          <div className="space-y-2 rounded-full border border-accent p-3">
+          <div className="space-y-2 kp-panel kp-panel-active">
             <p>
               <span className="font-semibold">Copy this into your app&apos;s .env file now.</span> It&apos;s shown only once. Keep it on
               your server: never in browser code or a public repo.
@@ -90,7 +90,7 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
       </div>
 
       <div className="space-y-2 text-sm">
-        <p className="font-semibold">2. Paste this into your AI coding tool</p>
+        <p className="font-display text-lg">2. Paste this into your AI coding tool</p>
         <p className="text-muted">Claude Code, Cursor, Lovable or similar. It builds the booking chat into your site.</p>
         <Copyable text={handoffPrompt(businessName)} tall />
       </div>
@@ -105,7 +105,7 @@ function Copyable({ text, tall }: { text: string; tall?: boolean }) {
       <pre className={`overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs ${tall ? "max-h-64" : ""}`}>{text}</pre>
       <button
         onClick={() => navigator.clipboard.writeText(text).then(() => (setCopied(true), setTimeout(() => setCopied(false), 2000)))}
-        className="rounded-xl border border-line px-3 py-1 font-semibold"
+        className="kp-btn-outline kp-btn-xs"
       >
         {copied ? "Copied ✓" : "Copy"}
       </button>

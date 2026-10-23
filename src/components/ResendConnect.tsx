@@ -39,7 +39,7 @@ export default function ResendConnect({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-semibold">Resend</p>
+          <p className="font-display text-lg">Resend</p>
           {connection ? (
             <p className="text-sm text-muted">
               Connected with a send-only key ({connection.meta.key_name}).{" "}
@@ -63,7 +63,7 @@ export default function ResendConnect({
           !open && (
             <button
               onClick={() => setOpen(true)}
-              className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent"
+              className="kp-btn-outline"
             >
               Connect Resend
             </button>
@@ -76,7 +76,7 @@ export default function ResendConnect({
             e.preventDefault();
             run(() => api("/api/connect/resend", { body: { projectId, apiKey: key } }));
           }}
-          className="space-y-2 rounded-xl border border-line bg-paper p-3 text-sm"
+          className="space-y-2 kp-note text-sm"
         >
           <ol className="list-decimal space-y-1 pl-5 text-muted">
             <li>In Resend, open API Keys and create a key with <b>Full access</b>.</li>
@@ -89,12 +89,12 @@ export default function ResendConnect({
             value={key}
             onChange={(e) => setKey(e.target.value)}
             placeholder="re_…"
-            className="w-full rounded-xl border border-line bg-card px-3 py-2"
+            className="w-full kp-input"
           />
           <div className="flex gap-3">
             <button
               disabled={busy || !key.trim()}
-              className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="kp-btn kp-btn-sm"
             >
               {busy ? "Connecting…" : "Connect"}
             </button>

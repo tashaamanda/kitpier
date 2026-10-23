@@ -62,8 +62,8 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
   const showJob = job && !(job.state === "failed" && pending);
 
   return (
-    <div className="space-y-2 rounded-xl border border-line bg-paper p-3 text-sm">
-      <p className="font-semibold">Database setup</p>
+    <div className="space-y-2 kp-note text-sm">
+      <p className="font-display text-lg">Database setup</p>
 
       {showJob && job.state === "schema_ready" && (
         <p>
@@ -108,7 +108,7 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
             <button
               disabled={busy}
               onClick={() => act(() => api(`/api/actions/${pending.id}/approve`, { body: {} }))}
-              className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="kp-btn kp-btn-sm"
             >
               Approve
             </button>
@@ -125,7 +125,7 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
           <button
             disabled={busy}
             onClick={() => act(() => api(`/api/projects/${projectId}/provision`, { body: {} }))}
-            className="rounded-full border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50"
+            className="kp-btn-outline"
           >
             {busy ? "Checking your Supabase…" : job ? "Propose again" : "Propose a database setup"}
           </button>

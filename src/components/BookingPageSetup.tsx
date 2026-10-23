@@ -43,8 +43,8 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
 
   return (
     <>
-      <section id="booking" className="space-y-3 rounded-2xl border border-line bg-card p-5">
-        <h2 className="font-semibold">Booking page</h2>
+      <section id="booking" className="space-y-3 kp-panel">
+        <h2 className="text-[22px]">Booking page</h2>
         {!databaseReady && <p className="text-sm text-muted">Set up the Supabase database first. Bookings are saved there.</p>}
 
         {st.widget && !editing && (
@@ -63,7 +63,7 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
         )}
 
         {pending && (
-          <div className="space-y-2 rounded-xl border border-line bg-paper p-3 text-sm">
+          <div className="space-y-2 kp-note text-sm">
             <p>Kitpier asks permission to publish a booking page for <b>{pending.spec.business_name}</b>:</p>
             <ul className="list-disc pl-5">
               <li>Services: {pending.spec.services.join(", ")}</li>
@@ -74,7 +74,7 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
               <button
                 disabled={busy}
                 onClick={() => act(() => api(`/api/actions/${pending.id}/approve`, { body: {} }))}
-                className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+                className="kp-btn kp-btn-sm"
               >
                 Approve
               </button>
@@ -95,10 +95,10 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
             }}
             className="space-y-2 text-sm"
           >
-            <input name="business_name" required maxLength={80} defaultValue={st.widget?.business_name} placeholder="Business name (e.g. Sam's Barbershop)" className="w-full rounded-xl border border-line bg-paper px-3 py-2" />
-            <input name="services" required maxLength={500} placeholder="Services, separated by commas (e.g. Haircut, Beard trim, Shave)" className="w-full rounded-xl border border-line bg-paper px-3 py-2" />
-            <input name="timezone" required maxLength={64} defaultValue={tz} className="w-full rounded-xl border border-line bg-paper px-3 py-2" />
-            <button disabled={busy} className="rounded-full border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50">
+            <input name="business_name" required maxLength={80} defaultValue={st.widget?.business_name} placeholder="Business name (e.g. Sam's Barbershop)" className="w-full kp-input" />
+            <input name="services" required maxLength={500} placeholder="Services, separated by commas (e.g. Haircut, Beard trim, Shave)" className="w-full kp-input" />
+            <input name="timezone" required maxLength={64} defaultValue={tz} className="w-full kp-input" />
+            <button disabled={busy} className="kp-btn-outline">
               Propose booking page
             </button>
           </form>

@@ -36,7 +36,7 @@ export default async function ListingPage({ params }: PageProps<"/catalog/[slug]
       </header>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <section className="space-y-4 rounded-2xl border border-line bg-card p-5 md:col-span-2">
+        <section className="space-y-4 kp-panel md:col-span-2">
           <p className="text-lg">{l.tagline}</p>
           <p className="text-muted">{l.description}</p>
           {l.features.length > 0 && (
@@ -58,7 +58,7 @@ export default async function ListingPage({ params }: PageProps<"/catalog/[slug]
           )}
         </section>
 
-        <aside className="space-y-3 rounded-2xl border border-line bg-card p-5 text-sm">
+        <aside className="space-y-3 kp-panel text-sm">
           <h2 className="font-semibold">Pricing</h2>
           <p>{l.pricing}</p>
           {l.type === "buy" && (
@@ -89,7 +89,7 @@ export default async function ListingPage({ params }: PageProps<"/catalog/[slug]
           {l.type !== "soon" && (
             <Link
               href="/"
-              className="block rounded-full bg-accent px-4 py-2 text-center font-semibold text-white hover:bg-accent-dark"
+              className="kp-btn kp-btn-sm w-full"
             >
               {l.type === "buy" ? "Add to a project" : "Connect in a project"}
             </Link>

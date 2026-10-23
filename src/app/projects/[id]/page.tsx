@@ -6,7 +6,7 @@ import ProjectView from "@/components/ProjectView";
 
 async function Project({ params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
-  if (!user) redirect("/");
+  if (!user) redirect("/signin");
   // Same ownership rule as requireProjectOwner: not yours → 404.
   const p = await one<{ id: string; name: string; description: string }>(
     pool,

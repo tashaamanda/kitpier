@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 
-const input = "w-full rounded-xl border border-line bg-card px-4 py-3 outline-none focus:border-accent";
-const button = "w-full rounded-full bg-accent py-3 font-semibold text-white hover:bg-accent-dark disabled:opacity-60";
-const card = "space-y-3 rounded-2xl border border-line bg-card p-5 shadow-sm";
+const input = "w-full kp-input";
+const button = "w-full kp-btn";
+const card = "grid gap-4"; // same open form layout as sign-in (no box)
 
 export function ForgotForm() {
   const [sent, setSent] = useState(false);
@@ -85,7 +85,7 @@ export function ResetForm() {
     return (
       <div className={card}>
         <p>This reset link is incomplete. Open the link from your email again, or ask for a new one.</p>
-        <Link href="/forgot" className="font-semibold text-accent underline">
+        <Link href="/forgot" className="underline">
           Ask for a new link
         </Link>
       </div>

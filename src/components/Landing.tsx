@@ -139,15 +139,24 @@ export default function Landing() {
                 <Link className="kp-btn" href="/catalog#build">
                   Start your own stack
                 </Link>
-                <span className="micro" style={{ color: "var(--muted)", textAlign: "center" }}>
-                  Checkout with PayPal · sandbox
+                <span className="lp-paywith micro">
+                  Checkout with
+                  {/* Official PayPal logo from paypalobjects.com, unmodified (PayPal brand guidelines) */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/brand/paypal.svg" alt="PayPal" width={71} height={20} />
+                  <span>· sandbox</span>
                 </span>
               </div>
             </div>
           </div>
           <div className="lp-trust micro">
             <div>
-              <strong>One checkout</strong>Credits via PayPal, no cards on Kitpier
+              <strong className="lp-trust-pp">
+                One checkout
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brand/paypal.svg" alt="PayPal" width={64} height={18} />
+              </strong>
+              Credits via PayPal, no cards on Kitpier
             </div>
             <div>
               <strong>Budgets enforced</strong>The server stops spend at your cap
