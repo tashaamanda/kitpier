@@ -53,6 +53,8 @@ export async function sweepDemoBookings() {
 
 /** Stand-in for Resend on demo projects. The code is readable here on purpose: it's how a judge completes the flow. */
 export async function captureMail(projectId: string, conversationId: string, kind: "code" | "confirmation", to: string, subject: string, body: string) {
+  // Same keep time as demo bookings: captured addresses don't outlive the demo.
+  await pool.query(`DELETE FROM demo_mail WHERE created_at < now() - interval '${KEEP_HOURS} hours'`);
   await pool.query(
     "INSERT INTO demo_mail (project_id, conversation_id, kind, to_address, subject, body) VALUES ($1, $2, $3, $4, $5, $6)",
     [projectId, conversationId, kind, to, subject, body],

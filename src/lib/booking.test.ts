@@ -443,6 +443,18 @@ describe("judge demo connection", () => {
     expect((await demoInbox(B)).mail).toHaveLength(0);
   });
 
+  it("drops captured emails after the demo keep time", async () => {
+    await pool.query(
+      "INSERT INTO demo_mail (project_id, kind, to_address, subject, body, created_at) VALUES ($1, 'code', 'old@example.com', 's', 'b', now() - interval '49 hours')",
+      [A.projectId],
+    );
+    await setDemo(A, true);
+    script = propose(nextTuesday());
+    const t = await turn("Haircut Tuesday 10am");
+    await requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1");
+    expect((await demoInbox(A)).mail.map((m) => m.to_address)).not.toContain("old@example.com");
+  });
+
   it("can't be switched on when the demo project isn't configured", async () => {
     const ref = process.env.DEMO_SUPABASE_REF;
     delete process.env.DEMO_SUPABASE_REF;
