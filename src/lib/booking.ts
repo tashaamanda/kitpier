@@ -43,7 +43,10 @@ export async function getWidget(id: string) {
 
 /** Owner proposes a booking page; the approval gate creates it (pending_action create_widget). */
 export async function proposeWidget(s: Scope, spec: WidgetSpec) {
-  const ready = await one(pool, "SELECT 1 FROM provision_jobs WHERE user_id = $1 AND project_id = $2 AND state = 'schema_ready'", [s.userId, s.projectId]);
+  // Ready = the business's own schema is provisioned, or the project uses the judge demo connection (its table exists).
+  const ready =
+    (await isDemo(pool, s)) ||
+    (await one(pool, "SELECT 1 FROM provision_jobs WHERE user_id = $1 AND project_id = $2 AND state = 'schema_ready'", [s.userId, s.projectId]));
   if (!ready) throw new HttpError(409, "Set up the database first");
   const id = newId("act");
   await tx(async (c) => {

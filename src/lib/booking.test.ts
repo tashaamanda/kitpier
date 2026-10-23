@@ -16,7 +16,7 @@ process.env.CREDENTIALS_MASTER_KEY = randomBytes(32).toString("base64");
 const { pool } = await import("./db");
 const { putCredential } = await import("./credentials");
 const { post, postedBalance } = await import("./ledger");
-const { bookingTurn, confirmBooking, requestBookingCode } = await import("./booking");
+const { bookingTurn, confirmBooking, proposeWidget, requestBookingCode } = await import("./booking");
 const { zonedToUtc } = await import("./slots");
 const { verifyCode } = await import("./email");
 const { claimBooking, reserveTurn, settleTurn, TURN_MAX_MICROS } = await import("./billing");
@@ -453,6 +453,13 @@ describe("judge demo connection", () => {
     const t = await turn("Haircut Tuesday 10am");
     await requestBookingCode("w_a", t.conversationId, t.pending!.id, "1.1.1.1");
     expect((await demoInbox(A)).mail.map((m) => m.to_address)).not.toContain("old@example.com");
+  });
+
+  it("lets a demo project propose a booking page without its own database", async () => {
+    const spec = { business_name: "B", services: ["Haircut"], timezone: TZ };
+    await expect(proposeWidget(B, spec)).rejects.toMatchObject({ status: 409 }); // no schema, no demo
+    await setDemo(B, true);
+    await expect(proposeWidget(B, spec)).resolves.toMatch(/^act_/);
   });
 
   it("can't be switched on when the demo project isn't configured", async () => {
