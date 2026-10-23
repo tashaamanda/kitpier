@@ -8,12 +8,14 @@ export function CatalogShell({ children }: { children: React.ReactNode }) {
     <main className="ct-page">
       <TopBar />
       <div className="ct-inner">{children}</div>
-      <footer className="ct-inner border-t border-line pt-4 text-xs text-muted" style={{ letterSpacing: "0.03em", lineHeight: 1.7 }}>
-        Kitpier is not affiliated with, endorsed by, or sponsored by the providers listed. Provider names are used
-        only to identify their services. Estimates are for planning; each provider&apos;s own pricing applies.{" "}
-        <Link href="/judges" className="underline">
-          For hackathon judges →
-        </Link>
+      <footer className="ct-inner kp-foot">
+        <p>
+          Kitpier is not affiliated with, endorsed by, or sponsored by the providers listed. Provider names are used only to
+          identify their services. Estimates are for planning; each provider&apos;s own pricing applies.{" "}
+          <Link href="/judges" className="underline">
+            For hackathon judges →
+          </Link>
+        </p>
       </footer>
     </main>
   );

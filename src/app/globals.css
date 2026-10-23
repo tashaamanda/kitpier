@@ -5,7 +5,7 @@
   --paper: #f5f5f3;
   --card: #ffffff;
   --ink: #111112;
-  --muted: #6a6a67;
+  --muted: #5f5f5c; /* 6.4:1 on white (was #6a6a67, 5.6:1) */
   --line: rgba(17, 17, 18, 0.14);
   --accent: #111112;
   --accent-dark: #2b2b2c;
@@ -254,3 +254,9 @@ button[aria-busy="true"] { cursor: progress; }
 .ct-row.ct-static:hover .name { text-decoration: none; }
 .lp-judges { color: var(--ink); text-decoration: none; background: linear-gradient(var(--ink), var(--ink)) 0 100% / 0 1px no-repeat; transition: background-size 0.2s ease; padding-bottom: 2px; }
 .lp-judges:hover { background-size: 100% 1px; }
+
+/* Legibility: Lato Light only reads well large. Small text gets Regular and a darker grey (design system §3). */
+.text-xs, .text-sm, .micro, .lp-item .meta, .lp-budget .note, .ct-row .price, .ct-soon, .app-row .desc, .lp-step p, .ct-row .tag { font-weight: 400; }
+.kp-foot { border-top: 1px solid var(--line); padding-top: 18px; }
+.kp-foot p, .lp-foot p { margin: 0; max-width: 92ch; font-size: 13px; font-weight: 400; line-height: 1.75; letter-spacing: 0.025em; color: var(--body-ink); }
+.kp-foot a, .lp-foot a { color: var(--ink); }
