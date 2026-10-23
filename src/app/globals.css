@@ -249,3 +249,6 @@ button[aria-busy="true"] { cursor: progress; }
     transition-delay: calc(var(--reveal-i, 0) * 80ms);
   }
 }
+/* rows that aren't links: no arrow, no hover underline (an arrow promises a destination) */
+.ct-row.ct-static .name::after { content: none; }
+.ct-row.ct-static:hover .name { text-decoration: none; }

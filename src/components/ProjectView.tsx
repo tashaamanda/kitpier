@@ -9,7 +9,6 @@ import { DemoInbox, DemoSwitch } from "./DemoConnection";
 import Planner from "./Planner";
 import ResendConnect from "./ResendConnect";
 import SupabaseConnect, { type Connection } from "./SupabaseConnect";
-import TopBar from "./TopBar";
 
 type Entry = { source: string; kind: string; amount_micros: number; created_at: string };
 type Order = { id: string; pack_id: string; amount_micros: number; status: string; created_at: string };
@@ -18,10 +17,12 @@ export default function ProjectView({
   projectId,
   name,
   description,
+  topBar,
 }: {
   projectId: string;
   name: string;
   description: string;
+  topBar: React.ReactNode; // server-rendered TopBar (it reads the session)
 }) {
   const [ledger, setLedger] = useState<Entry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -74,7 +75,7 @@ export default function ProjectView({
 
   return (
     <main className="app-page">
-      <TopBar signedIn />
+      {topBar}
       <div className="app-inner">
         <header className="app-head">
           <div className="grid gap-3">

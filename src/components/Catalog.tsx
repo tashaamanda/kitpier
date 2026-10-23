@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { BADGES, type Listing, type ListingType } from "@/lib/catalog";
-import TopBar from "./TopBar";
 
 // Listing type as small uppercase text with a dot (design system: no boxed badges).
 // Filled dot = run and capped by Kitpier; ring = your own account; dashed = arriving soon.
@@ -31,18 +30,5 @@ export function ListingRow({ l }: { l: Listing }) {
         {l.type === "buy" ? " · budget enforced" : l.type === "connect" ? " · estimate" : ""}
       </span>
     </Link>
-  );
-}
-
-export function CatalogShell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="ct-page">
-      <TopBar />
-      <div className="ct-inner">{children}</div>
-      <footer className="ct-inner border-t border-line pt-4 text-xs text-muted" style={{ letterSpacing: "0.03em", lineHeight: 1.7 }}>
-        Kitpier is not affiliated with, endorsed by, or sponsored by the providers listed. Provider names are used
-        only to identify their services. Estimates are for planning; each provider&apos;s own pricing applies.
-      </footer>
-    </main>
   );
 }

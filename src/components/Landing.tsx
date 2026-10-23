@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { LISTINGS } from "@/lib/catalog";
 import { PRICES } from "@/lib/pricecard";
 import { usd } from "@/lib/client";
 import TopBar from "./TopBar";
 
 // Signed-out home (kitpier-design.md). The stack below the fold is an example, labelled as one.
 export default function Landing() {
-  const soon = LISTINGS.filter((l) => l.type === "soon").length;
   return (
     <main>
       <section className="lp-hero" aria-label="Kitpier">
@@ -42,8 +40,8 @@ export default function Landing() {
               <span>Resend</span>
               <span aria-hidden="true">↗</span>
             </Link>
-            <Link href="/catalog#soon">
-              <span>{soon} arriving soon</span>
+            <Link href="/catalog">
+              <span>Full catalog</span>
               <span aria-hidden="true">↗</span>
             </Link>
           </div>

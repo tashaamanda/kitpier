@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, usd } from "@/lib/client";
 import { DRAFT_KEY } from "./BuildBox";
-import TopBar from "./TopBar";
 
 type P = { id: string; name: string; description: string };
 
@@ -13,10 +12,12 @@ export default function Dashboard({
   name,
   balanceMicros,
   projects,
+  topBar,
 }: {
   name: string;
   balanceMicros: number;
   projects: P[];
+  topBar: React.ReactNode; // server-rendered TopBar (it reads the session)
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export default function Dashboard({
 
   return (
     <main className="app-page">
-      <TopBar signedIn />
+      {topBar}
       <div className="app-inner">
         <header className="app-head">
           <div className="grid gap-3">

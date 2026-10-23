@@ -5,13 +5,14 @@ import { listProjects } from "@/lib/projects";
 import { currentUser } from "@/lib/session";
 import Dashboard from "@/components/Dashboard";
 import Landing from "@/components/Landing";
+import TopBar from "@/components/TopBar";
 
 // Reads the session cookie, so it streams inside <Suspense> (Cache Components).
 async function Home() {
   const user = await currentUser();
   if (!user) return <Landing />;
   const projects = (await listProjects(user)).map(({ id, name, description }) => ({ id, name, description }));
-  return <Dashboard name={user.name} balanceMicros={await postedBalance(pool, user.id)} projects={projects} />;
+  return <Dashboard name={user.name} balanceMicros={await postedBalance(pool, user.id)} projects={projects} topBar={<TopBar />} />;
 }
 
 export default function Page() {

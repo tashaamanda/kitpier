@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { one, pool } from "@/lib/db";
 import { currentUser } from "@/lib/session";
 import ProjectView from "@/components/ProjectView";
+import TopBar from "@/components/TopBar";
 
 async function Project({ params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
@@ -14,7 +15,7 @@ async function Project({ params }: { params: Promise<{ id: string }> }) {
     [(await params).id, user.id],
   );
   if (!p) notFound();
-  return <ProjectView projectId={p.id} name={p.name} description={p.description} />;
+  return <ProjectView projectId={p.id} name={p.name} description={p.description} topBar={<TopBar />} />;
 }
 
 export default function ProjectPage({ params }: PageProps<"/projects/[id]">) {

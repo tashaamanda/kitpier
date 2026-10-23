@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CATEGORIES, LISTINGS } from "@/lib/catalog";
-import { CatalogShell, ListingRow } from "@/components/Catalog";
+import { ListingRow } from "@/components/Catalog";
+import { CatalogShell } from "@/components/CatalogShell";
 import BuildBox from "@/components/BuildBox";
 
 export const metadata: Metadata = { title: "Catalog — Kitpier" };
@@ -38,15 +39,15 @@ export default function CatalogPage() {
           </div>
         ))}
         <div className="ct-cat" id="soon">
-          <h2>Arriving soon</h2>
-          <p className="ct-soon m-0">
-            {soon.map((l, i) => (
-              <span key={l.slug}>
-                {i > 0 && " · "}
+          <h2>Next on the pier</h2>
+          <ul className="ct-soon m-0 grid list-none gap-1 p-0">
+            {soon.map((l) => (
+              <li key={l.slug}>
                 <Link href={`/catalog/${l.slug}`}>{l.name}</Link>
-              </span>
+                {l.roadmap && <span>: {l.roadmap}</span>}
+              </li>
             ))}
-          </p>
+          </ul>
         </div>
       </section>
     </CatalogShell>

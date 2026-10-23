@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { BADGES, ESTIMATES_CHECKED, LISTINGS, getListing } from "@/lib/catalog";
 import { PRICE_CARD_VERSION, PRICES, TYPICAL_MONTH } from "@/lib/pricecard";
 import { usd } from "@/lib/client";
-import { Badge, CatalogShell, Monogram } from "@/components/Catalog";
+import { Badge, Monogram } from "@/components/Catalog";
+import { CatalogShell } from "@/components/CatalogShell";
 
 export function generateStaticParams() {
   return LISTINGS.map((l) => ({ slug: l.slug }));

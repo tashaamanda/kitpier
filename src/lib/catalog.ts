@@ -42,6 +42,8 @@ export type Listing = {
   pricing: string;
   setup?: string[];
   website?: string;
+  /** "soon" only: what it will add to a stack, shown as the roadmap line. */
+  roadmap?: string;
 };
 
 export const LISTINGS: Listing[] = [
@@ -103,15 +105,15 @@ export const LISTINGS: Listing[] = [
   },
   ...(
     [
-      ["neon", "Neon", "Database", "Serverless Postgres with branching.", "https://neon.com"],
-      ["upstash", "Upstash", "Cache & queues", "Serverless Redis and message queues.", "https://upstash.com"],
-      ["vercel", "Vercel", "Hosting", "Deploy and host your front end.", "https://vercel.com"],
-      ["clerk", "Clerk", "Auth", "Sign-in and user management.", "https://clerk.com"],
-      ["twilio", "Twilio", "SMS & voice", "Text message reminders.", "https://www.twilio.com"],
-      ["posthog", "PostHog", "Analytics", "Product analytics and session replay.", "https://posthog.com"],
+      ["twilio", "Twilio", "SMS & voice", "Text message reminders.", "https://www.twilio.com", "text customers before their appointment"],
+      ["clerk", "Clerk", "Auth", "Sign-in and user management.", "https://clerk.com", "sign-in for your app's customers"],
+      ["vercel", "Vercel", "Hosting", "Deploy and host your front end.", "https://vercel.com", "host the site your AI built"],
+      ["neon", "Neon", "Database", "Serverless Postgres with branching.", "https://neon.com", "a second database option"],
+      ["upstash", "Upstash", "Cache & queues", "Serverless Redis and message queues.", "https://upstash.com", "reminder and retry queues"],
+      ["posthog", "PostHog", "Analytics", "Product analytics and session replay.", "https://posthog.com", "see which pages turn into bookings"],
     ] as const
   ).map(
-    ([slug, name, category, tagline, website]): Listing => ({
+    ([slug, name, category, tagline, website, roadmap]): Listing => ({
       slug,
       name,
       provider: name,
@@ -123,6 +125,7 @@ export const LISTINGS: Listing[] = [
       priceSummary: "Coming soon",
       pricing: "Not available yet",
       website,
+      roadmap,
     }),
   ),
 ];
