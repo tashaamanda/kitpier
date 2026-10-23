@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 
@@ -58,6 +59,11 @@ export default function AuthForm() {
         className={input}
         autoComplete={mode === "signup" ? "new-password" : "current-password"}
       />
+      {mode === "login" && (
+        <Link href="/forgot" className="block text-right text-sm text-muted underline">
+          Forgot password?
+        </Link>
+      )}
       {error && <p className="text-sm text-danger">{error}</p>}
       <button
         disabled={busy}

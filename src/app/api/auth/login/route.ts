@@ -17,15 +17,16 @@ export const POST = route(
     const input = await body(req, Input);
     await rateLimit(`login:${await clientIp()}`, 20, 15 * 60_000);
     await rateLimit(`login:${input.email}`, 8, 15 * 60_000);
-    const user = await one<{ id: string; password_hash: string }>(
+    const user = await one<{ id: string; password_hash: string; session_version: number }>(
       pool,
-      "SELECT id, password_hash FROM users WHERE email = $1",
+      "SELECT id, password_hash, session_version FROM users WHERE email = $1",
       [input.email],
     );
     const ok = await bcrypt.compare(input.password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !ok) throw new HttpError(401, "Wrong email or password");
     const session = await getSession();
     session.userId = user.id;
+    session.v = user.session_version;
     await session.save();
     return { ok: true };
   },

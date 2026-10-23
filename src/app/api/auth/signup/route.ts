@@ -22,6 +22,7 @@ export const POST = route(
     if (r.rowCount === 0) throw new HttpError(409, "An account with that email already exists");
     const session = await getSession();
     session.userId = id;
+    session.v = 0;
     await session.save();
     return { ok: true };
   },
