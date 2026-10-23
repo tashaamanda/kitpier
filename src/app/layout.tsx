@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Instrument_Sans, Lato } from "next/font/google";
+import Reveal from "@/components/Reveal";
 import "./globals.css";
 
 // Design system (kitpier-design.md): Instrument Sans for wordmark/headlines/figures, Lato for everything else.
@@ -26,7 +28,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        {children}
+        {/* reads the URL, so it streams in after prerendering (Cache Components) */}
+        <Suspense fallback={null}>
+          <Reveal />
+        </Suspense>
+      </body>
     </html>
   );
 }
