@@ -40,7 +40,7 @@ export function ForgotForm() {
     <form onSubmit={submit} className={card}>
       <input name="email" type="email" required placeholder="Email" className={input} autoComplete="email" />
       {error && <p className="text-sm text-danger">{error}</p>}
-      <button disabled={busy} className={button}>
+      <button aria-busy={busy} disabled={busy} className={button}>
         {busy ? "…" : "Email me a reset link"}
       </button>
     </form>
@@ -113,7 +113,7 @@ export function ResetForm() {
           )}
         </p>
       )}
-      <button disabled={busy} className={button}>
+      <button aria-busy={busy} disabled={busy} className={button}>
         {busy ? "…" : "Set new password"}
       </button>
     </form>

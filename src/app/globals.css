@@ -196,3 +196,47 @@ h1, h2, h3 { font-weight: 500 !important; } /* Instrument Sans ships at 500; nev
 .ct-soon { color: var(--muted); font-size: 14px; letter-spacing: 0.035em; line-height: 1.8; }
 .ct-soon a { color: var(--ink); }
 @media (max-width: 820px) { .ct-cat { grid-template-columns: minmax(0, 1fr); } }
+
+/* ===== Motion: quick, quiet feedback (design system §motion: ~200ms, ease) ===== */
+@media (prefers-reduced-motion: no-preference) {
+  /* buttons: lift on hover, press on click */
+  .kp-btn, .kp-btn-outline, .kp-nav a.kp-pill {
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  }
+  .kp-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 16px 30px -14px rgba(0, 0, 0, 0.5); }
+  .kp-btn-outline:not(:disabled):hover, .kp-nav a.kp-pill:hover { transform: translateY(-1px); }
+  .kp-btn:not(:disabled):active, .kp-btn-outline:not(:disabled):active, .kp-nav a.kp-pill:active {
+    transform: translateY(0) scale(0.97); transition-duration: 0.08s;
+  }
+
+  /* fields: underline darkens smoothly */
+  .kp-input, .ct-build textarea, form input { transition: border-color 0.2s ease; }
+
+  /* rows: arrow nudges toward where it goes */
+  .app-row .micro, .lp-links a span:last-child { display: inline-block; transition: transform 0.2s ease; }
+  .app-row:hover .micro, .lp-links a:hover span:last-child { transform: translate(2px, -2px); }
+  .ct-row .name::after { display: inline-block; transition: transform 0.2s ease; }
+  .ct-row:hover .name::after { transform: translate(2px, -2px); }
+  .app-row, .ct-row { transition: opacity 0.2s ease; }
+
+  /* messages: errors and notes fade in so they're noticed */
+  .kp-note, p.text-danger { animation: kp-fade 0.3s ease both; }
+
+  /* home: wordmark and sentence settle once on load (visible from the first frame) */
+  .lp-wordmark { animation: kp-settle 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .lp-sub { animation: kp-settle 0.7s 0.08s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .lp-cta { animation: kp-settle 0.7s 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+}
+@keyframes kp-fade { from { opacity: 0.2; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+@keyframes kp-settle { from { opacity: 0.35; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* working state: a small spinner beside the label while a request runs */
+button[aria-busy="true"] { cursor: progress; }
+.kp-btn[aria-busy="true"]::after, .kp-btn-outline[aria-busy="true"]::after {
+  content: ""; width: 0.9em; height: 0.9em; margin-left: 10px; border-radius: 50%;
+  border: 1.5px solid currentColor; border-right-color: transparent; animation: kp-spin 0.7s linear infinite;
+}
+@keyframes kp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .kp-btn[aria-busy="true"]::after, .kp-btn-outline[aria-busy="true"]::after { animation: none; border-right-color: currentColor; opacity: 0.5; }
+}

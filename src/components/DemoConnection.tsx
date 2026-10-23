@@ -34,7 +34,7 @@ export function DemoSwitch({ projectId, on, available, onChange }: { projectId: 
             <span className="font-semibold">✓ Using the demo connection.</span> Bookings go to Kitpier&apos;s demo database and emails
             appear in the Demo inbox below instead of being sent. Demo bookings are removed after 48 hours.
           </p>
-          <button disabled={busy} onClick={() => set(false)} className="text-muted underline">
+          <button aria-busy={busy} disabled={busy} onClick={() => set(false)} className="text-muted underline">
             Switch off and use my own accounts
           </button>
         </>
@@ -44,7 +44,7 @@ export function DemoSwitch({ projectId, on, available, onChange }: { projectId: 
             <span className="font-semibold">No Supabase or Resend account?</span> Try everything with Kitpier&apos;s demo connection
             instead. Nothing is created in your accounts.
           </p>
-          <button disabled={busy} onClick={() => set(true)} className="kp-btn-outline">
+          <button aria-busy={busy} disabled={busy} onClick={() => set(true)} className="kp-btn-outline">
             Use demo connection
           </button>
         </>

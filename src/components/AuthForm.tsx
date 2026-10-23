@@ -68,8 +68,8 @@ export default function AuthForm() {
         </Link>
       )}
       {error && <p className="text-sm text-danger">{error}</p>}
-      <button disabled={busy} className="kp-btn mt-2 w-full">
-        {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
+      <button aria-busy={busy} disabled={busy} className="kp-btn mt-2 w-full">
+        {busy ? (mode === "signup" ? "Creating account" : "Signing in") : mode === "signup" ? "Create account" : "Sign in"}
       </button>
     </form>
   );

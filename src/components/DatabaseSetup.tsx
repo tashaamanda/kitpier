@@ -106,13 +106,13 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
           <p className="text-muted">Nothing else in your Supabase account is read or changed.</p>
           <div className="flex gap-3">
             <button
-              disabled={busy}
+              aria-busy={busy} disabled={busy}
               onClick={() => act(() => api(`/api/actions/${pending.id}/approve`, { body: {} }))}
               className="kp-btn kp-btn-sm"
             >
               Approve
             </button>
-            <button disabled={busy} onClick={() => act(() => api(`/api/actions/${pending.id}/reject`, { body: {} }))} className="text-muted underline">
+            <button aria-busy={busy} disabled={busy} onClick={() => act(() => api(`/api/actions/${pending.id}/reject`, { body: {} }))} className="text-muted underline">
               Not now
             </button>
           </div>
@@ -123,7 +123,7 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
         <div className="space-y-2">
           {!job && <p className="text-muted">Your app needs somewhere to store bookings. Kitpier can propose a setup for you to approve.</p>}
           <button
-            disabled={busy}
+            aria-busy={busy} disabled={busy}
             onClick={() => act(() => api(`/api/projects/${projectId}/provision`, { body: {} }))}
             className="kp-btn-outline"
           >

@@ -53,7 +53,7 @@ export default function ResendConnect({
         </div>
         {connection ? (
           <button
-            disabled={busy}
+            aria-busy={busy} disabled={busy}
             onClick={() => run(() => api("/api/connect/resend", { method: "DELETE", body: { projectId } }))}
             className="text-sm text-muted underline disabled:opacity-50"
           >
@@ -93,7 +93,7 @@ export default function ResendConnect({
           />
           <div className="flex gap-3">
             <button
-              disabled={busy || !key.trim()}
+              aria-busy={busy} disabled={busy || !key.trim()}
               className="kp-btn kp-btn-sm"
             >
               {busy ? "Connecting…" : "Connect"}

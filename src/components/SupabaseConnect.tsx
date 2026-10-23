@@ -63,12 +63,12 @@ export default function SupabaseConnect({
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>
         {connection ? (
-          <button disabled={busy} onClick={disconnect} className="text-sm text-muted underline disabled:opacity-50">
+          <button aria-busy={busy} disabled={busy} onClick={disconnect} className="text-sm text-muted underline disabled:opacity-50">
             Disconnect
           </button>
         ) : (
           <button
-            disabled={busy}
+            aria-busy={busy} disabled={busy}
             onClick={connect}
             className="kp-btn-outline"
           >

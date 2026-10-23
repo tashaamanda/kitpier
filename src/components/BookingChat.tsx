@@ -111,7 +111,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
               <div className="space-y-2 border-t border-line pt-2">
                 {!codeSent ? (
                   <button
-                    disabled={busy}
+                    aria-busy={busy} disabled={busy}
                     onClick={async () => {
                       setBusy(true);
                       setCodeError(null);
@@ -149,7 +149,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
               </div>
             )}
             <button
-              disabled={busy || (codeSent && code.length > 0 && code.length < 6)}
+              aria-busy={busy} disabled={busy || (codeSent && code.length > 0 && code.length < 6)}
               onClick={() => run(() => call(`/r/${widgetId}/confirm`, { conversationId, pendingId: pending.id, code: code.length === 6 ? code : undefined }))}
               className="kp-btn kp-btn-sm"
             >
@@ -169,7 +169,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
             placeholder="e.g. A haircut on Tuesday at 10am"
             className="flex-1 kp-input"
           />
-          <button disabled={busy || !text.trim()} className="kp-btn kp-btn-sm">
+          <button aria-busy={busy} disabled={busy || !text.trim()} className="kp-btn kp-btn-sm">
             Send
           </button>
         </form>

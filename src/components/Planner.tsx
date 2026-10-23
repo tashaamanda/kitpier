@@ -109,7 +109,7 @@ export default function Planner({
           </p>
           {(paused === "credits" || paused === "budget") && (
             <button
-              disabled={busy}
+              aria-busy={busy} disabled={busy}
               onClick={() => send("My booking page is paused. What should I do?")}
               className="kp-btn-outline kp-btn-xs"
             >
@@ -149,7 +149,7 @@ export default function Planner({
           placeholder={view?.messages.length ? "Reply to the planner" : "A booking site for my barbershop, budget $30/month"}
           className="flex-1 kp-input"
         />
-        <button disabled={busy || !text.trim()} className="kp-btn kp-btn-sm">
+        <button aria-busy={busy} disabled={busy || !text.trim()} className="kp-btn kp-btn-sm">
           Send
         </button>
       </form>
@@ -211,7 +211,7 @@ function StackCard({ p, status, busy, onApprove }: { p: Proposal; status: Status
         </ol>
       ) : (
         <button
-          disabled={busy}
+          aria-busy={busy} disabled={busy}
           onClick={() => onApprove(p.id)}
           className="kp-btn kp-btn-sm"
         >

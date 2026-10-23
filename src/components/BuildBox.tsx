@@ -52,7 +52,7 @@ export default function BuildBox() {
       />
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap items-center gap-5">
-        <button disabled={busy || !text.trim()} className="kp-btn">
+        <button aria-busy={busy} disabled={busy || !text.trim()} className="kp-btn">
           {busy ? "Planning…" : "Build my stack"}
         </button>
         <span className="micro text-muted">Nothing is bought until you approve</span>

@@ -68,11 +68,11 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
           <p className="text-muted">No key yet.</p>
         )}
         <div className="flex gap-3">
-          <button disabled={busy} onClick={create} className="kp-btn kp-btn-sm">
+          <button aria-busy={busy} disabled={busy} onClick={create} className="kp-btn kp-btn-sm">
             {key ? "Create a new key" : "Create key"}
           </button>
           {key && (
-            <button disabled={busy} onClick={revoke} className="text-muted underline">
+            <button aria-busy={busy} disabled={busy} onClick={revoke} className="text-muted underline">
               Turn off
             </button>
           )}

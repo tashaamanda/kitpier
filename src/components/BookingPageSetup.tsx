@@ -72,13 +72,13 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
             </ul>
             <div className="flex gap-3">
               <button
-                disabled={busy}
+                aria-busy={busy} disabled={busy}
                 onClick={() => act(() => api(`/api/actions/${pending.id}/approve`, { body: {} }))}
                 className="kp-btn kp-btn-sm"
               >
                 Approve
               </button>
-              <button disabled={busy} onClick={() => act(() => api(`/api/actions/${pending.id}/reject`, { body: {} }))} className="text-muted underline">
+              <button aria-busy={busy} disabled={busy} onClick={() => act(() => api(`/api/actions/${pending.id}/reject`, { body: {} }))} className="text-muted underline">
                 Not now
               </button>
             </div>
@@ -98,7 +98,7 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
             <input name="business_name" required maxLength={80} defaultValue={st.widget?.business_name} placeholder="Business name (e.g. Sam's Barbershop)" className="w-full kp-input" />
             <input name="services" required maxLength={500} placeholder="Services, separated by commas (e.g. Haircut, Beard trim, Shave)" className="w-full kp-input" />
             <input name="timezone" required maxLength={64} defaultValue={tz} className="w-full kp-input" />
-            <button disabled={busy} className="kp-btn-outline">
+            <button aria-busy={busy} disabled={busy} className="kp-btn-outline">
               Propose booking page
             </button>
           </form>
