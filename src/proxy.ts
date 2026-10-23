@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { appOrigin } from "@/lib/app-url";
 
 // One public address: visits to the old Render host (or www.) move to APP_URL's host, path and query kept.
 // Only those hosts are redirected, and only when APP_URL points elsewhere, so local dev and the switch-over are safe.
 // PayPal webhooks and the /v1 API are excluded (matcher below): their callers have the old URL registered.
 export function proxy(req: NextRequest) {
-  const appUrl = process.env.APP_URL;
-  if (!appUrl) return NextResponse.next();
-  const primary = new URL(appUrl);
+  if (!process.env.APP_URL) return NextResponse.next();
+  const primary = new URL(appOrigin());
   const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").split(",")[0].trim().toLowerCase();
   if (!host || host === primary.host) return NextResponse.next();
   if (!host.endsWith(".onrender.com") && host !== `www.${primary.host}`) return NextResponse.next();

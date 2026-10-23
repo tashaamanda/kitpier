@@ -1,6 +1,7 @@
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
+import { appOrigin } from "./app-url";
 import { one, pool } from "./db";
 
 // v = the user's session_version when this cookie was issued; a password reset bumps it, ending older sessions.
@@ -60,11 +61,9 @@ export async function requireUser(): Promise<User> {
 
 /** Reject cross-site state-changing requests (defense in depth on top of SameSite=lax). */
 export async function assertSameOrigin() {
-  const appUrl = process.env.APP_URL;
-  if (!appUrl) throw new Error("APP_URL must be set");
   const origin = (await headers()).get("origin");
   // Compare against the configured public origin, not request headers a proxy could rewrite.
-  if (!origin || origin !== new URL(appUrl).origin) {
+  if (!origin || origin !== appOrigin()) {
     throw new HttpError(403, "Bad origin");
   }
 }

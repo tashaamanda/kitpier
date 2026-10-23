@@ -28,6 +28,13 @@ describe("primary address", () => {
     expect(proxy(req("https://kitpier.onrender.com/", "kitpier.onrender.com")).headers.get("location")).toBeNull();
   });
 
+  it("treats a trailing dot in APP_URL as the same host", () => {
+    process.env.APP_URL = "https://kitpier.com.";
+    const r = proxy(req("https://kitpier.onrender.com/r/w_1", "kitpier.onrender.com"));
+    expect(r.headers.get("location")).toBe("https://kitpier.com/r/w_1");
+    expect(proxy(req("https://kitpier.com/", "kitpier.com")).headers.get("location")).toBeNull();
+  });
+
   it("never runs on PayPal webhooks or the /v1 API", () => {
     expect(matcher.test("/api/paypal/webhook")).toBe(false);
     expect(matcher.test("/v1/booking/converse")).toBe(false);

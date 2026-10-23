@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
+import { appOrigin } from "./app-url";
 import { one, pool, tx } from "./db";
 import { rateLimit } from "./http";
 import { sendPlatformMail } from "./mail";
@@ -19,8 +20,7 @@ export async function requestPasswordReset(email: string, ip: string) {
   const delivery = (async () => {
     const user = await one<{ id: string }>(pool, "SELECT id FROM users WHERE email = $1", [email]);
     if (!user) return;
-    const appUrl = process.env.APP_URL;
-    if (!appUrl) throw new Error("APP_URL must be set");
+    const origin = appOrigin();
     const token = randomBytes(32).toString("base64url");
     await tx(async (c) => {
       await c.query("DELETE FROM password_resets WHERE user_id = $1", [user.id]);
@@ -30,7 +30,7 @@ export async function requestPasswordReset(email: string, ip: string) {
       );
     });
     // Link from the configured origin, never the request's Host. Token in the fragment: browsers don't send it to servers.
-    const link = `${new URL(appUrl).origin}/reset#token=${token}`;
+    const link = `${origin}/reset#token=${token}`;
     await sendPlatformMail(
       email,
       "Reset your Kitpier password",

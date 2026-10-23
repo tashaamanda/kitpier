@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { appOrigin } from "@/lib/app-url";
 import { requireProjectOwner } from "@/lib/projects";
 import { HttpError, currentUser } from "@/lib/session";
 import { claimState, finishConnect } from "@/lib/supabase";
 
 // Supabase redirects the browser here after consent. Always lands back on a page, never shows provider errors.
 export async function GET(req: Request) {
-  const appUrl = process.env.APP_URL!;
+  const appUrl = appOrigin();
   const q = new URL(req.url).searchParams;
   const back = (path: string, params: Record<string, string>) =>
     NextResponse.redirect(new URL(`${path}?${new URLSearchParams(params)}`, appUrl), 303);

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { appOrigin } from "./app-url";
 import { one, pool } from "./db";
 import { deleteCredential, getCredential, putCredential } from "./credentials";
 import { HttpError } from "./session";
@@ -18,9 +19,7 @@ function client() {
 }
 
 export function redirectUri() {
-  const appUrl = process.env.APP_URL;
-  if (!appUrl) throw new Error("APP_URL must be set");
-  return new URL("/api/connect/supabase/callback", appUrl).toString();
+  return new URL("/api/connect/supabase/callback", appOrigin()).toString();
 }
 
 /** Step 1: remember a single-use state + PKCE verifier for this user/project, return the consent URL. */
