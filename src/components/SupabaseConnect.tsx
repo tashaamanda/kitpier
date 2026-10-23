@@ -70,7 +70,7 @@ export default function SupabaseConnect({
           <button
             disabled={busy}
             onClick={connect}
-            className="rounded-xl border border-accent px-4 py-2 text-sm font-semibold text-accent disabled:opacity-50"
+            className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent disabled:opacity-50"
           >
             Connect Supabase
           </button>

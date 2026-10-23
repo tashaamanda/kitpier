@@ -1,18 +1,11 @@
 import Link from "next/link";
 import { BADGES, type Listing, type ListingType } from "@/lib/catalog";
+import TopBar from "./TopBar";
 
-const BADGE_STYLE: Record<ListingType, string> = {
-  buy: "bg-accent text-white",
-  connect: "border border-accent text-accent",
-  soon: "border border-line text-muted",
-};
-
+// Listing type as small uppercase text with a dot (design system: no boxed badges).
+// Filled dot = run and capped by Kitpier; ring = your own account; dashed = arriving soon.
 export function Badge({ type }: { type: ListingType }) {
-  return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGE_STYLE[type]}`}>
-      {BADGES[type].label}
-    </span>
-  );
+  return <span className={`kp-kind micro ${type === "buy" ? "buy" : ""}`}>{BADGES[type].label}</span>;
 }
 
 // Text monogram instead of provider logos: identification only, no brand assets.
@@ -20,51 +13,33 @@ export function Monogram({ name }: { name: string }) {
   return (
     <span
       aria-hidden
-      className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-line bg-paper text-lg font-semibold"
+      className="font-display flex size-11 shrink-0 items-center justify-center rounded-full border border-line text-lg"
     >
       {name[0]}
     </span>
   );
 }
 
-export function ListingCard({ l }: { l: Listing }) {
+export function ListingRow({ l }: { l: Listing }) {
   return (
-    <Link
-      href={`/catalog/${l.slug}`}
-      className="flex h-full flex-col gap-3 rounded-2xl border border-line bg-card p-4 hover:border-accent"
-    >
-      <div className="flex items-center gap-3">
-        <Monogram name={l.name} />
-        <div className="min-w-0">
-          <p className="font-semibold">{l.name}</p>
-          <p className="text-sm text-muted">{l.category}</p>
-        </div>
-      </div>
-      <p className="flex-1 text-sm">{l.tagline}</p>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Badge type={l.type} />
-        <span className="text-sm text-muted">
-          {l.priceSummary}
-          {l.type === "buy" ? " · budget enforced" : l.type === "connect" ? " · estimate" : ""}
-        </span>
-      </div>
+    <Link href={`/catalog/${l.slug}`} className="ct-row">
+      <span className="name">{l.name}</span>
+      <Badge type={l.type} />
+      <span className="tag">{l.tagline}</span>
+      <span className="price">
+        {l.priceSummary}
+        {l.type === "buy" ? " · budget enforced" : l.type === "connect" ? " · estimate" : ""}
+      </span>
     </Link>
   );
 }
 
 export function CatalogShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-8 px-5 py-10">
-      <nav className="flex items-center justify-between text-sm">
-        <Link href="/catalog" className="text-lg font-semibold">
-          Kitpier
-        </Link>
-        <Link href="/" className="text-muted underline">
-          Your projects
-        </Link>
-      </nav>
-      {children}
-      <footer className="border-t border-line pt-4 text-xs text-muted">
+    <main className="ct-page">
+      <TopBar />
+      <div className="ct-inner">{children}</div>
+      <footer className="ct-inner border-t border-line pt-4 text-xs text-muted" style={{ letterSpacing: "0.03em", lineHeight: 1.7 }}>
         Kitpier is not affiliated with, endorsed by, or sponsored by the providers listed. Provider names are used
         only to identify their services. Estimates are for planning; each provider&apos;s own pricing applies.
       </footer>

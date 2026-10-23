@@ -89,7 +89,7 @@ export default async function ListingPage({ params }: PageProps<"/catalog/[slug]
           {l.type !== "soon" && (
             <Link
               href="/"
-              className="block rounded-xl bg-accent px-4 py-2 text-center font-semibold text-white hover:bg-accent-dark"
+              className="block rounded-full bg-accent px-4 py-2 text-center font-semibold text-white hover:bg-accent-dark"
             >
               {l.type === "buy" ? "Add to a project" : "Connect in a project"}
             </Link>

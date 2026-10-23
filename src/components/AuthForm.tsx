@@ -24,31 +24,34 @@ export default function AuthForm() {
       } else {
         await api("/api/auth/login", { body: { email: f.get("email"), password: f.get("password") } });
       }
+      router.push("/");
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setBusy(false);
     }
   }
 
-  const input = "w-full rounded-xl border border-line bg-card px-4 py-3 outline-none focus:border-accent";
+  const input =
+    "w-full border-0 border-b border-line bg-transparent px-0 py-3 outline-none focus:border-ink placeholder:text-[#a3a39f]";
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-2xl border border-line bg-card p-5 shadow-sm">
-      <div className="mb-2 grid grid-cols-2 rounded-xl bg-paper p-1 text-sm font-medium">
+    <form onSubmit={submit} className="grid gap-4">
+      <div className="micro flex gap-6" role="tablist" aria-label="Account">
         {(["signup", "login"] as const).map((m) => (
           <button
             key={m}
             type="button"
+            role="tab"
+            aria-selected={mode === m}
             onClick={() => setMode(m)}
-            className={`rounded-lg py-2 ${mode === m ? "bg-card shadow-sm" : "text-muted"}`}
+            className={`pb-1 ${mode === m ? "border-b border-ink text-ink" : "text-muted"}`}
           >
             {m === "signup" ? "Create account" : "Sign in"}
           </button>
         ))}
       </div>
-      {mode === "signup" && <input name="name" required placeholder="Your name" className={input} />}
+      {mode === "signup" && <input name="name" required placeholder="Your name" className={input} autoComplete="name" />}
       <input name="email" type="email" required placeholder="Email" className={input} autoComplete="email" />
       <input
         name="password"
@@ -60,15 +63,12 @@ export default function AuthForm() {
         autoComplete={mode === "signup" ? "new-password" : "current-password"}
       />
       {mode === "login" && (
-        <Link href="/forgot" className="block text-right text-sm text-muted underline">
+        <Link href="/forgot" className="justify-self-end text-sm text-muted underline">
           Forgot password?
         </Link>
       )}
       {error && <p className="text-sm text-danger">{error}</p>}
-      <button
-        disabled={busy}
-        className="w-full rounded-xl bg-accent py-3 font-semibold text-white hover:bg-accent-dark disabled:opacity-60"
-      >
+      <button disabled={busy} className="kp-btn mt-2 w-full">
         {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
       </button>
     </form>

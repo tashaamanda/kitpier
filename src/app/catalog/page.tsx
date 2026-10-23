@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CATEGORIES, LISTINGS } from "@/lib/catalog";
-import { CatalogShell, ListingCard } from "@/components/Catalog";
+import { CatalogShell, ListingRow } from "@/components/Catalog";
 import BuildBox from "@/components/BuildBox";
 
 export const metadata: Metadata = { title: "Catalog — Kitpier" };
@@ -13,44 +13,41 @@ export default function CatalogPage() {
 
   return (
     <CatalogShell>
-      <header className="space-y-2">
-        <h1 className="text-4xl font-semibold">The app store for AI-built software</h1>
-        <p className="max-w-2xl text-lg text-muted">
-          Tell us what you&apos;re building. We&apos;ll find everything your product needs.
+      <header className="grid gap-5">
+        <h1 className="ct-title">
+          The <i>catalog</i>
+        </h1>
+        <p className="ct-lead">
+          Tell us what you&apos;re building and Kitpier plans the stack to your budget. Or browse every service
+          yourself.
         </p>
       </header>
       <BuildBox />
 
-      <section className="space-y-6">
-        <div>
-          <h2 className="text-xl font-semibold">Or browse yourself</h2>
-          <p className="text-sm text-muted">{CATEGORIES.join(" · ")}</p>
-        </div>
+      <section className="grid gap-8" aria-label="Services by category">
         {categories.map((c) => (
-          <div key={c} className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">{c}</h3>
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div key={c} className="ct-cat">
+            <h2>{c}</h2>
+            <div className="ct-rows">
               {available
                 .filter((l) => l.category === c)
                 .map((l) => (
-                  <li key={l.slug}>
-                    <ListingCard l={l} />
-                  </li>
+                  <ListingRow key={l.slug} l={l} />
                 ))}
-            </ul>
+            </div>
           </div>
         ))}
-        <p className="text-sm text-muted">
-          + {soon.length} providers being added:{" "}
-          {soon.map((l, i) => (
-            <span key={l.slug}>
-              {i > 0 && ", "}
-              <Link href={`/catalog/${l.slug}`} className="underline">
-                {l.name}
-              </Link>
-            </span>
-          ))}
-        </p>
+        <div className="ct-cat" id="soon">
+          <h2>Arriving soon</h2>
+          <p className="ct-soon m-0">
+            {soon.map((l, i) => (
+              <span key={l.slug}>
+                {i > 0 && " · "}
+                <Link href={`/catalog/${l.slug}`}>{l.name}</Link>
+              </span>
+            ))}
+          </p>
+        </div>
       </section>
     </CatalogShell>
   );

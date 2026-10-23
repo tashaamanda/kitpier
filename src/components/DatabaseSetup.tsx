@@ -108,7 +108,7 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
             <button
               disabled={busy}
               onClick={() => act(() => api(`/api/actions/${pending.id}/approve`, { body: {} }))}
-              className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
               Approve
             </button>
@@ -125,7 +125,7 @@ export default function DatabaseSetup({ projectId, onReady }: { projectId: strin
           <button
             disabled={busy}
             onClick={() => act(() => api(`/api/projects/${projectId}/provision`, { body: {} }))}
-            className="rounded-xl border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50"
+            className="rounded-full border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50"
           >
             {busy ? "Checking your Supabase…" : job ? "Propose again" : "Propose a database setup"}
           </button>

@@ -9,7 +9,7 @@ export default function Page() {
       <h1 className="text-3xl font-semibold">Forgot your password?</h1>
       <p className="mb-6 mt-2 text-muted">Enter your account email and we&apos;ll send you a link to choose a new one.</p>
       <ForgotForm />
-      <Link href="/" className="mt-6 text-sm text-muted underline">
+      <Link href="/signin" className="mt-6 text-sm text-muted underline">
         Back to sign in
       </Link>
     </main>

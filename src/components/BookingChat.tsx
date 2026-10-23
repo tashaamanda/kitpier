@@ -149,7 +149,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
             <button
               disabled={busy || (codeSent && code.length > 0 && code.length < 6)}
               onClick={() => run(() => call(`/r/${widgetId}/confirm`, { conversationId, pendingId: pending.id, code: code.length === 6 ? code : undefined }))}
-              className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
               {code.length === 6 ? "Confirm and email me" : "Confirm booking"}
             </button>
@@ -167,7 +167,7 @@ export default function BookingChat({ widgetId, business, services }: { widgetId
             placeholder="e.g. A haircut on Tuesday at 10am"
             className="flex-1 rounded-xl border border-line bg-card px-3 py-2"
           />
-          <button disabled={busy || !text.trim()} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <button disabled={busy || !text.trim()} className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
             Send
           </button>
         </form>

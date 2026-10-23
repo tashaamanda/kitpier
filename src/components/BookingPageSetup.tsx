@@ -74,7 +74,7 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
               <button
                 disabled={busy}
                 onClick={() => act(() => api(`/api/actions/${pending.id}/approve`, { body: {} }))}
-                className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+                className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
               >
                 Approve
               </button>
@@ -98,7 +98,7 @@ export default function BookingPageSetup({ projectId, databaseReady }: { project
             <input name="business_name" required maxLength={80} defaultValue={st.widget?.business_name} placeholder="Business name (e.g. Sam's Barbershop)" className="w-full rounded-xl border border-line bg-paper px-3 py-2" />
             <input name="services" required maxLength={500} placeholder="Services, separated by commas (e.g. Haircut, Beard trim, Shave)" className="w-full rounded-xl border border-line bg-paper px-3 py-2" />
             <input name="timezone" required maxLength={64} defaultValue={tz} className="w-full rounded-xl border border-line bg-paper px-3 py-2" />
-            <button disabled={busy} className="rounded-xl border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50">
+            <button disabled={busy} className="rounded-full border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50">
               Propose booking page
             </button>
           </form>

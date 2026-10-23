@@ -44,7 +44,7 @@ export function DemoSwitch({ projectId, on, available, onChange }: { projectId: 
             <span className="font-semibold">No Supabase or Resend account?</span> Try everything with Kitpier&apos;s demo connection
             instead. Nothing is created in your accounts.
           </p>
-          <button disabled={busy} onClick={() => set(true)} className="rounded-xl border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50">
+          <button disabled={busy} onClick={() => set(true)} className="rounded-full border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-50">
             Use demo connection
           </button>
         </>

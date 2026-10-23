@@ -68,7 +68,7 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
           <p className="text-muted">No key yet.</p>
         )}
         <div className="flex gap-3">
-          <button disabled={busy} onClick={create} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <button disabled={busy} onClick={create} className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
             {key ? "Create a new key" : "Create key"}
           </button>
           {key && (
@@ -78,7 +78,7 @@ export default function AppHandoff({ projectId, businessName }: { projectId: str
           )}
         </div>
         {fresh && (
-          <div className="space-y-2 rounded-xl border border-accent p-3">
+          <div className="space-y-2 rounded-full border border-accent p-3">
             <p>
               <span className="font-semibold">Copy this into your app&apos;s .env file now.</span> It&apos;s shown only once. Keep it on
               your server: never in browser code or a public repo.

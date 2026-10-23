@@ -26,7 +26,7 @@ export default function BuildBox() {
         try {
           sessionStorage.setItem(DRAFT_KEY, description);
         } catch {}
-        router.push("/");
+        router.push("/signin");
         return;
       }
       const { id } = await api<{ id: string }>("/api/projects", {
@@ -40,26 +40,23 @@ export default function BuildBox() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-2xl border border-line bg-card p-5 shadow-sm">
-      <label htmlFor="build" className="block text-lg font-semibold">
-        What are you building?
-      </label>
+    <form onSubmit={submit} className="ct-build" id="build">
+      <label htmlFor="build-text">What are you building?</label>
       <textarea
-        id="build"
+        id="build-text"
         value={text}
         onChange={(e) => setText(e.target.value)}
         maxLength={500}
-        rows={3}
+        rows={2}
         placeholder="An AI receptionist for my hair salon that talks to customers, books appointments and sends confirmations."
-        className="w-full resize-none rounded-xl border border-line bg-paper px-4 py-3 outline-none focus:border-accent"
       />
       {error && <p className="text-sm text-danger">{error}</p>}
-      <button
-        disabled={busy || !text.trim()}
-        className="rounded-xl bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
-      >
-        Build my stack
-      </button>
+      <div className="flex flex-wrap items-center gap-5">
+        <button disabled={busy || !text.trim()} className="kp-btn">
+          {busy ? "Planning…" : "Build my stack"}
+        </button>
+        <span className="micro text-muted">Nothing is bought until you approve</span>
+      </div>
     </form>
   );
 }

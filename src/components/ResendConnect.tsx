@@ -63,7 +63,7 @@ export default function ResendConnect({
           !open && (
             <button
               onClick={() => setOpen(true)}
-              className="rounded-xl border border-accent px-4 py-2 text-sm font-semibold text-accent"
+              className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent"
             >
               Connect Resend
             </button>
@@ -94,7 +94,7 @@ export default function ResendConnect({
           <div className="flex gap-3">
             <button
               disabled={busy || !key.trim()}
-              className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="rounded-full bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
             >
               {busy ? "Connecting…" : "Connect"}
             </button>
