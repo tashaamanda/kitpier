@@ -1,0 +1,54 @@
+# Render Blueprint for Kitpier (render.com → New → Blueprint → this repo).
+# Secrets are prompted at creation (sync: false); none are stored here.
+# Run the SQL migrations once against DATABASE_URL before first use:  MIGRATE_URL=<url> node scripts/migrate.mjs
+services:
+  - type: web
+    name: kitpier
+    runtime: node
+    region: virginia
+    plan: free            # use a paid plan to keep it always on
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_SSL
+        value: require
+      - key: PAYPAL_API_BASE
+        value: https://api-m.sandbox.paypal.com
+      - key: PLATFORM_DAILY_AI_CAP_MICROS
+        value: "20000000"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: CREDENTIALS_MASTER_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_MERCHANT_ID
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_OAUTH_CLIENT_ID
+        sync: false
+      - key: SUPABASE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: DEMO_SUPABASE_REF
+        sync: false
+      - key: DEMO_SUPABASE_SECRET_KEY
+        sync: false
