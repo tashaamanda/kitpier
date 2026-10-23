@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Kitpier — the app store for AI-built software",
   description: "Discover, buy, and connect the services your app needs, with PayPal checkout.",
+  robots: { index: false, follow: false }, // not listed in search engines until after the hackathon
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
