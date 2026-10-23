@@ -47,6 +47,9 @@ export default function Landing() {
           </div>
           <div aria-hidden="true" />
           <div className="micro lp-legal">
+            <Link href="/judges" className="lp-judges">
+              For hackathon judges →
+            </Link>
             <span>Kitpier © 2026</span>
             <span>Not affiliated with listed providers</span>
           </div>
@@ -142,7 +145,7 @@ export default function Landing() {
                   {/* Official PayPal logo from paypalobjects.com, unmodified (PayPal brand guidelines) */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/brand/paypal.svg" alt="PayPal" width={71} height={20} />
-                  <span>· sandbox</span>
+                  <span>· Sandbox, hackathon demo</span>
                 </span>
               </div>
             </div>

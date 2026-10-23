@@ -252,3 +252,5 @@ button[aria-busy="true"] { cursor: progress; }
 /* rows that aren't links: no arrow, no hover underline (an arrow promises a destination) */
 .ct-row.ct-static .name::after { content: none; }
 .ct-row.ct-static:hover .name { text-decoration: none; }
+.lp-judges { color: var(--ink); text-decoration: none; background: linear-gradient(var(--ink), var(--ink)) 0 100% / 0 1px no-repeat; transition: background-size 0.2s ease; padding-bottom: 2px; }
+.lp-judges:hover { background-size: 100% 1px; }
