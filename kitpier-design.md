@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.0.1
 updated: 2026-10-24
 source_of_truth: design-brain/projects/kitpier.json
 mock: https://claude.ai/artifact/7XBNBdyRmZgEAoACN8AbSV (v29, approved by Tasha 2026-10-24)
@@ -28,7 +28,7 @@ top-centre, menu top-right, small links and legal text in the bottom corners).
 white:      { value: "#FFFFFF", role: page background (every surface) }
 ink:        { value: "#111112", role: all headlines, wordmark, primary buttons, icons }
 body:       { value: "#5A5A57", role: hero sentence and long body copy }
-dim:        { value: "#6A6A67", role: secondary text, captions, meta }
+dim:        { value: "#5F5F5C", role: secondary text, captions, meta }
 numeral:    { value: "#CDCDC9", role: large decorative step numbers only }
 band:       { value: "#F5F5F3", role: alternate section band (stack section) }
 hairline:   { value: "rgba(17,17,18,0.14)", role: dividers, card borders }
@@ -36,7 +36,7 @@ paypal:     { value: "#FFC439", role: official PayPal button only (with PayPal's
 contrast:
   ink_on_white: "19.0:1 (AAA)"
   body_on_white: "6.9:1 (AA, AAA large)"
-  dim_on_white: "5.6:1 (AA)"
+  dim_on_white: "6.4:1 (AA)"
   white_on_ink: "19.0:1 (AAA)"
   numeral_on_white: "1.6:1, decorative only, never carries meaning alone (title beside it does)"
 dark_mode: none in v1. The site is deliberately white; app screens follow it.
@@ -63,6 +63,7 @@ scale:
   micro:      { font: body 400, size: 10.5px, uppercase: true, tracking: "+0.14em", leading: 1.25 }
 ```
 
+Lato Light (300) only at 15px and up; anything 14px or smaller uses Lato Regular (400) so it stays legible.
 Two faces only. Instrument Sans (with true italics) for the wordmark, headlines, step titles, service names,
 prices and big figures. Lato for every other piece of text. Italic display is used for emphasis words
 ("*production*", "*that emails a confirmation*") and the wordmark's *k* and *p*. Headlines are always ink, never
@@ -129,4 +130,5 @@ touch_targets:       { min: "44px (Apple) / 48px (Material); hero CTA 56px, PayP
 
 ## Changelog
 
+- 1.0.1 (2026-10-24): dim grey #6A6A67 -> #5F5F5C; small text uses Lato 400 (legibility feedback).
 - 1.0.0 (2026-10-24): first system, from the approved landing mock (white editorial direction).
