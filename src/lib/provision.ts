@@ -10,7 +10,7 @@ import { BOOKINGS_TEMPLATE, BOOKINGS_V1 } from "./templates";
 // happen; only POST /api/actions/:id/approve starts a job; polls advance it one step at a time.
 // Every Management API call on a project ref checks managed_supabase_refs first and fails closed.
 
-type Scope = { userId: string; projectId: string };
+type Scope = { userId: string; projectId: string; agentTokenId?: string };
 export type ProvisionSpec = { mode: "new"; org_slug: string; org_name: string; project_name: string; region: "americas"; template: string };
 export type Job = { id: string; state: string; ref: string | null; error: string | null; updated_at: string };
 type Action = { id: string; status: string; spec: ProvisionSpec; created_at: string };
@@ -64,11 +64,12 @@ export async function proposeProvision(s: Scope) {
       "UPDATE pending_actions SET status = 'rejected', decided_at = now() WHERE user_id = $1 AND project_id = $2 AND kind = 'provision_supabase' AND status = 'pending'",
       [s.userId, s.projectId],
     );
-    await c.query("INSERT INTO pending_actions (id, user_id, project_id, kind, spec) VALUES ($1, $2, $3, 'provision_supabase', $4)", [
+    await c.query("INSERT INTO pending_actions (id, user_id, project_id, kind, spec, agent_token_id) VALUES ($1, $2, $3, 'provision_supabase', $4, $5)", [
       id,
       s.userId,
       s.projectId,
       JSON.stringify(spec),
+      s.agentTokenId ?? null,
     ]);
   });
   return { id, spec };

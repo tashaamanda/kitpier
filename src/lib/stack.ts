@@ -8,7 +8,8 @@ import { HttpError } from "./session";
 // Server side of the planner's tools. Everything is scoped to the session's (user, project): the model passes no
 // ids, and every price comes from the catalog or the price card.
 
-export type Scope = { userId: string; projectId: string };
+/** agentTokenId: set when an agent (not the person) is acting, so proposals record who made them. */
+export type Scope = { userId: string; projectId: string; agentTokenId?: string };
 export type Usage = { messages_per_month: number; bookings_per_month: number };
 export type StackItem = { slug: string; name: string; type: Listing["type"]; category: string; reason: string; price: string };
 export type Proposal = {
@@ -82,9 +83,9 @@ export async function proposeStack(
   await tx(async (c) => {
     await c.query("UPDATE stack_proposals SET status = 'superseded' WHERE user_id = $1 AND project_id = $2 AND status = 'proposed'", [s.userId, s.projectId]);
     await c.query(
-      `INSERT INTO stack_proposals (id, user_id, project_id, items, usage, enforced_micros, external_paid_micros, budget_cap_micros, price_version)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, s.userId, s.projectId, JSON.stringify(items), JSON.stringify(est.usage), est.enforced_micros, est.external_paid_from_micros, cap, PRICE_CARD_VERSION],
+      `INSERT INTO stack_proposals (id, user_id, project_id, items, usage, enforced_micros, external_paid_micros, budget_cap_micros, price_version, agent_token_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [id, s.userId, s.projectId, JSON.stringify(items), JSON.stringify(est.usage), est.enforced_micros, est.external_paid_from_micros, cap, PRICE_CARD_VERSION, s.agentTokenId ?? null],
     );
   });
   return { id, items, ...est, budget_cap_micros: cap, over_budget: est.enforced_micros > cap };

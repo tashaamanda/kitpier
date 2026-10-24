@@ -232,14 +232,14 @@ function TopUpCard({ t, projectId, onPaid }: { t: TopUp; projectId: string; onPa
           <li>
             {t.status === "paid"
               ? `Your monthly budget went up by ${usd(t.budget_raise_micros)}`
-              : `Your monthly budget goes up by ${usd(t.budget_raise_micros)}, so the credits can be used this month`}
+              : `Your monthly budget goes from ${usd(t.budget_before_micros ?? 0)} to ${usd((t.budget_before_micros ?? 0) + t.budget_raise_micros)}, so the credits can be used this month`}
           </li>
         )}
       </ul>
       {t.status === "paid" ? (
         <p className="text-sm">Bookings are back on.</p>
       ) : (
-        <BuyCredits projectId={projectId} onPaid={onPaid} fixedPack={t.pack_id} topUpId={t.id} />
+        <BuyCredits projectId={projectId} onPaid={onPaid} fixedPack={t.pack_id} topUpId={t.id} budgetSeenMicros={t.budget_before_micros} />
       )}
     </div>
   );

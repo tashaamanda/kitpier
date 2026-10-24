@@ -89,9 +89,56 @@ export default function JudgesPage() {
           Prefer to start from nothing? <Link href="/signin" className="underline">Create your own account</Link>, then
           describe an app on the <Link href="/catalog#build" className="underline">catalog</Link>, approve the stack the
           planner proposes, switch on &ldquo;Use demo connection&rdquo;, approve the booking page, buy credits and book.
-          About eight minutes. Sandbox purchases are limited to one pack per account per day, so your own account also
+          About eight minutes. Sandbox purchases are limited to three packs ($75) per account per day, so your own account also
           avoids sharing that limit with other judges.
         </p>
+      </section>
+
+      <section className="ct-cat" aria-labelledby="agent-h">
+        <h2 id="agent-h">Agent path</h2>
+        {/* One right-hand column: the intro and the steps share its edges. */}
+        <div className="grid gap-6">
+        <p className="ct-lead m-0">
+          The same flow, driven by your AI coding agent. About five minutes with Claude Code (any agent that can make
+          HTTPS calls works). The agent plans and proposes; you approve and pay from links it hands you.
+        </p>
+        <ol className="ct-rows m-0 list-none p-0">
+          <li className="ct-row ct-static">
+            <span className="name">1. Connect</span>
+            <span className="kp-kind micro">Your agent</span>
+            <span className="tag">
+              In an empty folder, ask: &ldquo;Read kitpier.com/llms.txt and connect to Kitpier, new project &lsquo;Agent
+              test&rsquo;.&rdquo; Open the link it shows, sign in with the judge account, choose the project and press Allow.
+              The agent saves its token to a private file, never in chat.
+            </span>
+          </li>
+          <li className="ct-row ct-static">
+            <span className="name">2. Plan and approve</span>
+            <span className="kp-kind buy micro">PayPal sandbox</span>
+            <span className="tag">
+              Ask: &ldquo;Plan a booking page for my barbershop and send me the approval link.&rdquo; On that page approve
+              the stack, switch on the demo connection and, if it asks, buy credits with the sandbox buyer.
+            </span>
+          </li>
+          <li className="ct-row ct-static">
+            <span className="name">3. Page and key</span>
+            <span className="kp-kind micro">Approval link</span>
+            <span className="tag">
+              Ask: &ldquo;Propose the booking page, request an API key and send me a new link.&rdquo; Approve both. The agent
+              then collects the key once and gives you the live booking page.
+            </span>
+          </li>
+          <li className="ct-row ct-static">
+            <span className="name">4. Optional: MCP tools</span>
+            <span className="kp-kind micro">Claude Code</span>
+            <span className="tag">
+              Ask the agent to set up Kitpier&apos;s MCP config, approve its write to .mcp.json, then restart Claude Code in
+              that folder with <span className="font-semibold">KITPIER_AGENT_TOKEN=&quot;$(cat ~/.config/kitpier/token)&quot; claude</span>. Kitpier&apos;s
+              tools (project_status, plan_stack, get_approval_link and more) are now available.
+            </span>
+          </li>
+        </ol>
+        </div>
       </section>
 
       <section className="ct-cat" aria-labelledby="what-h">
@@ -119,6 +166,14 @@ export default function JudgesPage() {
             <span className="tag">
               Kitpier services spend from credits against a monthly cap. At the cap, bookings pause before going over and
               the assistant offers a PayPal top-up.
+            </span>
+          </div>
+          <div className="ct-row ct-static">
+            <span className="name">Agents</span>
+            <span />
+            <span className="tag">
+              Agents get a token for one project that can read, plan and propose. Approving, paying and connecting
+              accounts stay in your browser; a key that spends credits needs your explicit approval.
             </span>
           </div>
         </div>

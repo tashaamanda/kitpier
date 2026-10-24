@@ -20,6 +20,21 @@ export function route<A extends unknown[]>(fn: (...args: A) => Promise<unknown>,
   };
 }
 
+/**
+ * Agent tokens, poll tokens and API keys only travel over HTTPS. In production a request that reached the edge over
+ * plain HTTP is refused (Render terminates TLS and sets X-Forwarded-Proto). Localhost development is exempt.
+ */
+export function requireHttps(req: Request, env: Record<string, string | undefined> = process.env) {
+  if (env.NODE_ENV !== "production") return;
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? new URL(req.url).protocol.replace(":", "");
+  if (proto !== "https") throw new HttpError(403, "HTTPS is required", "https_required");
+}
+
+/** JSON that must never be cached by browsers or proxies: one-time secrets (agent tokens, API keys, poll tokens). */
+export function noStore(data: unknown) {
+  return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
+}
+
 export async function body<T>(req: Request, schema: ZodType<T>): Promise<T> {
   const json = await req.json().catch(() => {
     throw new HttpError(400, "Expected JSON body");

@@ -1,8 +1,8 @@
 import type pg from "pg";
 import { one, pool, tx } from "./db";
-import { post } from "./ledger";
-import { applyVerifiedOrderTx, type OrderRow } from "./orders";
-import { PayPalError, captureOrder, getOrder, valueToMicros, type PayPalOrder } from "./paypal";
+import { admitCapture, applyVerifiedOrderTx } from "./orders";
+import { captureEventTx } from "./payment-events";
+import { PayPalError, captureOrder, getOrder, type PayPalOrder } from "./paypal";
 import { HttpError } from "./session";
 
 export type PayPalEvent = {
@@ -31,9 +31,6 @@ async function claim(c: pg.PoolClient, e: PayPalEvent) {
   return r.rowCount === 1;
 }
 
-const orderByCapture = (c: pg.PoolClient, captureId: string) =>
-  one<OrderRow>(c, "SELECT * FROM orders WHERE capture_id = $1 FOR UPDATE", [captureId]);
-
 /**
  * Handles an event whose signature has ALREADY been verified. Any PayPal reads happen before the
  * transaction; the event claim and its effects then commit together (SPEC §4.1), so a crash
@@ -52,6 +49,9 @@ export async function handleVerifiedEvent(e: PayPalEvent): Promise<string> {
       : undefined;
     if (!row) return "ignored:unknown_order";
     if (row.status === "created" || row.status === "approved") {
+      // Same allowance check as the browser path (R4-2): a checkout over the limit is never captured, so the buyer
+      // isn't charged. Its approval simply lapses at PayPal.
+      if (!(await admitCapture(row.id))) return "rejected:pack_limit";
       try {
         await captureOrder(e.resource.id!);
       } catch (err) {
@@ -95,42 +95,19 @@ export async function handleVerifiedEvent(e: PayPalEvent): Promise<string> {
         // resource = the refund; its "up" link points at the capture.
         const up = e.resource.links?.find((l) => l.rel === "up")?.href ?? "";
         const captureId = up.split("/captures/")[1]?.split(/[/?]/)[0];
-        const order = captureId ? await orderByCapture(c, captureId) : undefined;
-        if (!order || !e.resource.id || !e.resource.amount) return "ignored:unknown_capture";
-        await post(c, {
-          userId: order.user_id,
-          projectId: order.project_id,
-          source: `refund:${e.resource.id}`,
-          kind: "refund",
-          amountMicros: -valueToMicros(e.resource.amount.value),
-        });
-        await c.query(
-          "UPDATE refund_requests SET state = 'completed', updated_at = now() WHERE paypal_refund_id = $1 AND state IN ('held','sent')",
-          [e.resource.id],
-        );
-        return "refund:posted";
+        if (!captureId || !e.resource.id || !e.resource.amount) return "ignored:unknown_capture";
+        return captureEventTx(c, e.id, e.event_type, captureId, { id: e.resource.id, amount: e.resource.amount });
       }
       case "PAYMENT.CAPTURE.REVERSED": {
-        const order = e.resource.id ? await orderByCapture(c, e.resource.id) : undefined;
-        if (!order) return "ignored:unknown_capture";
-        await post(c, {
-          userId: order.user_id,
-          projectId: order.project_id,
-          source: `reversal:${order.capture_id}`,
-          kind: "reversal",
-          amountMicros: -order.amount_micros,
-        });
-        await c.query("UPDATE orders SET status = 'reversed', updated_at = now() WHERE id = $1", [order.id]);
-        await c.query("UPDATE users SET frozen = true WHERE id = $1", [order.user_id]);
-        return "reversal:posted";
+        if (!e.resource.id) return "ignored:unknown_capture";
+        return captureEventTx(c, e.id, e.event_type, e.resource.id, {});
       }
       case "CUSTOMER.DISPUTE.CREATED": {
-        const ids = (e.resource.disputed_transactions ?? []).map((t) => t.seller_transaction_id).filter(Boolean);
-        const r = await c.query(
-          "UPDATE users SET frozen = true WHERE id IN (SELECT user_id FROM orders WHERE capture_id = ANY($1))",
-          [ids],
-        );
-        return `dispute:frozen:${r.rowCount}`;
+        // A dispute can name several captures; each is held now or as soon as it's linked to an order.
+        const ids = [...new Set((e.resource.disputed_transactions ?? []).map((t) => t.seller_transaction_id).filter((x): x is string => !!x))].sort();
+        const results = [];
+        for (const id of ids) results.push(await captureEventTx(c, e.id, e.event_type, id, {}));
+        return results.length ? results.join(",") : "ignored:no_transactions";
       }
       default:
         return "ignored:event_type";

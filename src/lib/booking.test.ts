@@ -342,13 +342,18 @@ describe("billing", () => {
     expect(await claimBooking(r.id)).toBe(false);
   });
 
-  it("expired reservations charge recorded usage only", async () => {
+  it("expired reservations charge recorded usage only: a confirmed booking, never a claim whose outcome is unknown", async () => {
     const r = await reserveTurn(A, "cv", 1000);
-    await pool.query("UPDATE reservations SET expires_at = now() - interval '1 second', booked = true WHERE id = $1", [r.id]);
+    await pool.query("UPDATE reservations SET expires_at = now() - interval '1 second', booking_state = 'confirmed' WHERE id = $1", [r.id]);
     await reserveTurn(A, "cv2", 1000); // sweep runs here
-    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 50_000); // booking recorded, no message usage recorded
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 50_000); // confirmed booking, no message usage recorded
     const d = (await pool.query("SELECT exposure_micros FROM platform_daily_spend")).rows[0];
     expect(d.exposure_micros).toBe(1000);
+
+    const claimed = await reserveTurn(A, "cv3", 1000);
+    await pool.query("UPDATE reservations SET expires_at = now() - interval '1 second', booking_state = 'claimed' WHERE id = $1", [claimed.id]);
+    await reserveTurn(A, "cv4", 1000);
+    expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 50_000); // unchanged
   });
 });
 
@@ -377,7 +382,7 @@ describe("Booking API for the builder's own server (/v1/booking/*)", () => {
     expect(await postedBalance(pool, A.userId)).toBe(10_000_000 - 70_000);
     const k = (await pool.query("SELECT last_used_at, secret_hash FROM api_keys")).rows[0];
     expect(k.last_used_at).not.toBeNull();
-    expect(k.secret_hash.toString("utf8")).not.toContain(key.split("_")[2]); // only a hash is stored
+    expect(k.secret_hash.toString("utf8")).not.toContain(key.slice(14)); // only a hash is stored
   });
 
   it("no key, malformed, wrong secret, revoked or replaced keys are all 401, checked before the body", async () => {

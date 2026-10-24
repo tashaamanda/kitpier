@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { PRICES } from "./pricecard";
-import { claimBooking, recordTurnUsage, releaseBooking, reserveTurn, settleTurn } from "./billing";
+import { claimBooking, confirmBookingWrite, recordTurnUsage, releaseBooking, reserveTurn, settleTurn } from "./billing";
 import { getCredential } from "./credentials";
 import { demoConfig, supabaseHeaders, isDemo, sweepDemoBookings } from "./demo";
 import { emailConnected, sendCode, sendConfirmation, verifyCode } from "./email";
@@ -28,7 +28,7 @@ const MODEL_DEADLINE_MS = 45_000; // well inside the 120s reservation and the 90
 const PROVIDER_TIMEOUT_MS = 10_000;
 
 export type Widget = { id: string; user_id: string; project_id: string; business_name: string; services: string[]; timezone: string };
-type Scope = { userId: string; projectId: string };
+type Scope = { userId: string; projectId: string; agentTokenId?: string };
 
 export const WidgetSpec = z.object({
   business_name: z.string().trim().min(1).max(80),
@@ -54,11 +54,12 @@ export async function proposeWidget(s: Scope, spec: WidgetSpec) {
       "UPDATE pending_actions SET status = 'rejected', decided_at = now() WHERE user_id = $1 AND project_id = $2 AND kind = 'create_widget' AND status = 'pending'",
       [s.userId, s.projectId],
     );
-    await c.query("INSERT INTO pending_actions (id, user_id, project_id, kind, spec) VALUES ($1, $2, $3, 'create_widget', $4)", [
+    await c.query("INSERT INTO pending_actions (id, user_id, project_id, kind, spec, agent_token_id) VALUES ($1, $2, $3, 'create_widget', $4, $5)", [
       id,
       s.userId,
       s.projectId,
       JSON.stringify(spec),
+      s.agentTokenId ?? null,
     ]);
   });
   return id;
@@ -226,20 +227,68 @@ function tools(s: Scope, w: Widget, conversationId: string, onPending: (p: Pendi
 }
 
 // --- Request plumbing: idempotent per request id, one request at a time per conversation ---
+// A request row is bound to its operation and exact input (op_hash) and, once it reserves, to its reservation (set in
+// the reservation's own transaction). A request that may have charged is never forgotten: a retry gets the stored
+// result, or a reconciled one built from what actually happened, and never a second charge.
 
 const RequestId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
+const opHash = (op: unknown) => createHash("sha256").update(JSON.stringify(op)).digest("base64url");
 
-/** Claim a request id. Returns the stored response if this request already completed. */
-async function claimRequest(widgetId: string, requestId: string) {
-  RequestId.parse(requestId);
-  // A request whose server died mid-way (still 'running' after 3 minutes) may be retried.
-  await pool.query(
-    "DELETE FROM turn_requests WHERE widget_id = $1 AND request_id = $2 AND status = 'running' AND created_at < now() - interval '3 minutes'",
+/** What the customer sees for a request whose own response was lost after it may have charged. */
+async function reconciledResponse(conversationId: string): Promise<TurnResult> {
+  const c = await one<Conv>(pool, "SELECT id, turns, input_chars, booked, pending FROM conversations WHERE id = $1", [conversationId]);
+  if (c?.booked) return { conversationId, reply: "You're booked.", booked: true };
+  return { conversationId, reply: "Sorry, something went wrong on our side. Please try again.", booked: false, pending: publicPending(c?.pending ?? null) };
+}
+
+/**
+ * Settle a request that failed or was abandoned. Nothing charged (no reservation, or it settled at $0): forget it so a
+ * retry runs again. Otherwise store `result` (the original response, if we had it) or a reconciled one, so a retry
+ * returns that instead of running and charging again.
+ */
+async function closeRequest(widgetId: string, requestId: string, result?: TurnResult) {
+  const r = await one<{ reservation_id: string | null; conversation_id: string | null }>(
+    pool,
+    `SELECT t.reservation_id, r.conversation_id FROM turn_requests t LEFT JOIN reservations r ON r.id = t.reservation_id
+     WHERE t.widget_id = $1 AND t.request_id = $2 AND t.status = 'running'`,
     [widgetId, requestId],
   );
-  const fresh = await one(pool, "INSERT INTO turn_requests (widget_id, request_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING 1", [widgetId, requestId]);
+  if (!r) return;
+  if (r.reservation_id) await settleTurn(r.reservation_id); // no-op if already settled
+  const charged =
+    r.reservation_id && (await one(pool, "SELECT 1 FROM ledger_entries WHERE source = $1", [`usage:${r.reservation_id}`]));
+  if (!charged) {
+    await pool.query("DELETE FROM turn_requests WHERE widget_id = $1 AND request_id = $2 AND status = 'running'", [widgetId, requestId]);
+    return;
+  }
+  const response = result ?? (await reconciledResponse(r.conversation_id!));
+  await finishRequest(widgetId, requestId, response);
+}
+
+/** Claim a request id. Returns the stored response if this request already completed. */
+async function claimRequest(widgetId: string, requestId: string, op: unknown) {
+  RequestId.parse(requestId);
+  const hash = opHash(op);
+  // A request whose server died mid-way (still 'running' after 3 minutes) is closed: re-run if it never charged,
+  // otherwise answered from what actually happened.
+  const stale = await one(
+    pool,
+    "SELECT 1 FROM turn_requests WHERE widget_id = $1 AND request_id = $2 AND status = 'running' AND created_at < now() - interval '3 minutes'",
+    [widgetId, requestId],
+  );
+  if (stale) await closeRequest(widgetId, requestId);
+  const fresh = await one(pool, "INSERT INTO turn_requests (widget_id, request_id, op_hash) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING 1", [
+    widgetId,
+    requestId,
+    hash,
+  ]);
   if (fresh) return null;
-  const prior = await one<{ status: string; response: unknown }>(pool, "SELECT status, response FROM turn_requests WHERE widget_id = $1 AND request_id = $2", [widgetId, requestId]);
+  const prior = await one<{ status: string; response: unknown; op_hash: string | null }>(
+    pool,
+    "SELECT status, response, op_hash FROM turn_requests WHERE widget_id = $1 AND request_id = $2",
+    [widgetId, requestId],
+  );
+  if (prior?.op_hash && prior.op_hash !== hash) throw new HttpError(409, "That request id was already used for a different message");
   if (prior?.status === "done") return prior.response;
   throw new HttpError(409, "Still working on that message");
 }
@@ -248,17 +297,20 @@ async function finishRequest(widgetId: string, requestId: string, response: unkn
   await pool.query("UPDATE turn_requests SET status = 'done', response = $3 WHERE widget_id = $1 AND request_id = $2", [widgetId, requestId, JSON.stringify(response)]);
 }
 
-/** Forget a request that failed before doing anything, so the customer can retry it. */
+/** Forget a request that failed before doing anything (no reservation), so the customer can retry it. */
 async function dropRequest(widgetId: string, requestId: string) {
-  await pool.query("DELETE FROM turn_requests WHERE widget_id = $1 AND request_id = $2 AND status = 'running'", [widgetId, requestId]);
+  await pool.query("DELETE FROM turn_requests WHERE widget_id = $1 AND request_id = $2 AND status = 'running' AND reservation_id IS NULL", [
+    widgetId,
+    requestId,
+  ]);
 }
 
-/** If the request fails with an error, forget its id so the customer's retry runs again. */
-async function released<T>(widgetId: string, requestId: string, fn: () => Promise<T>): Promise<T> {
+/** On an error, close the request: forgotten if nothing was charged, otherwise answered (see closeRequest). */
+async function released<T>(widgetId: string, requestId: string, fn: () => Promise<T>, result: () => TurnResult | undefined): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    await dropRequest(widgetId, requestId);
+    await closeRequest(widgetId, requestId, result()).catch(() => {}); // if this fails too, the 3-minute path closes it
     throw e;
   }
 }
@@ -305,7 +357,7 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
   const s = { userId: w.user_id, projectId: w.project_id };
   if (text.length > LIMITS.messageChars) throw new HttpError(400, "That message is too long");
 
-  const prior = await claimRequest(w.id, requestId);
+  const prior = await claimRequest(w.id, requestId, { op: "turn", conversationId, text });
   if (prior) return prior as TurnResult;
   try {
     await rateLimit(`book-ip:${ip}`, 40, 60 * 60_000);
@@ -321,7 +373,8 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
     await pool.query("INSERT INTO conversations (id, widget_id) VALUES ($1, $2)", [conv.id, w.id]);
   }
   const c = conv;
-  const done = async (r: TurnResult) => (await finishRequest(w.id, requestId, r), r);
+  let result: TurnResult | undefined;
+  const done = async (r: TurnResult) => ((result = r), await finishRequest(w.id, requestId, r), r);
 
   // A chat ends with its booking: no more model turns (and no charge) after that.
   if (c.booked) return done({ conversationId: c.id, reply: "You're all booked. To make another booking, please start a new chat.", booked: true });
@@ -331,7 +384,7 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
   return released(w.id, requestId, () => withLease(c.id, async () => {
     let reservation;
     try {
-      reservation = await reserveTurn(s, c.id, BOOKING_PLATFORM_RESERVE);
+      reservation = await reserveTurn(s, c.id, BOOKING_PLATFORM_RESERVE, undefined, { widgetId: w.id, requestId });
     } catch (e) {
       if (e instanceof HttpError && (e.status === 402 || e.status === 503)) return done({ conversationId: c.id, reply: PAUSED(w), booked: false, paused: true });
       throw e;
@@ -385,7 +438,7 @@ export async function bookingTurn(widgetId: string, conversationId: string | nul
     if (!reply) reply = pending ? "Please check the details below and press Confirm." : "Sorry, something went wrong on our side. Could you say that again?";
     await pool.query("INSERT INTO conversation_messages (conversation_id, role, body) VALUES ($1, 'assistant', $2)", [c.id, reply.slice(0, 2000)]);
     return done({ conversationId: c.id, reply, booked: false, pending: publicPending(pending), emailAvailable: pending ? await emailConnected(s) : undefined });
-  }));
+  }), () => result);
 }
 
 /**
@@ -404,7 +457,7 @@ export async function confirmBooking(
   const w = await getWidget(widgetId);
   if (!w) throw new HttpError(404, "Booking page not found");
   const s = { userId: w.user_id, projectId: w.project_id };
-  const prior = await claimRequest(w.id, requestId);
+  const prior = await claimRequest(w.id, requestId, { op: "confirm", conversationId, pendingId, code: code ?? null });
   if (prior) return prior as TurnResult;
   try {
     await rateLimit(`book-ip:${ip}`, 40, 60 * 60_000);
@@ -412,7 +465,8 @@ export async function confirmBooking(
     await dropRequest(w.id, requestId);
     throw e;
   }
-  const done = async (r: TurnResult) => (await finishRequest(w.id, requestId, r), r);
+  let result: TurnResult | undefined;
+  const done = async (r: TurnResult) => ((result = r), await finishRequest(w.id, requestId, r), r);
 
   return released(w.id, requestId, () => withLease(conversationId, async () => {
     const c = await loadConversation(w.id, conversationId);
@@ -427,7 +481,7 @@ export async function confirmBooking(
 
     let reservation;
     try {
-      reservation = await reserveTurn(s, c.id, 0, PRICES["booking.created"].micros);
+      reservation = await reserveTurn(s, c.id, 0, PRICES["booking.created"].micros, { widgetId: w.id, requestId });
     } catch (e) {
       if (e instanceof HttpError && (e.status === 402 || e.status === 503)) return done({ conversationId: c.id, reply: PAUSED(w), booked: false, paused: true });
       throw e;
@@ -445,14 +499,18 @@ export async function confirmBooking(
         await pool.query("UPDATE conversations SET pending = NULL WHERE id = $1", [c.id]);
         reply = "Sorry, someone just took that time. Which other time would suit you?";
       } else {
-        booked = true;
+        // Written. Mark the conversation booked first, then make the booking chargeable: if anything fails in between,
+        // the booking is free rather than charged twice (a retry sees "already booked" and charges nothing).
         await pool.query("UPDATE conversations SET booked = true, pending = NULL WHERE id = $1", [c.id]);
+        booked = true;
+        await confirmBookingWrite(reservation.id); // false if the reservation expired meanwhile: then not charged
         reply = `You're booked: ${p.service} on ${p.date} at ${p.time}, under ${p.name}.`;
       }
     } catch (e) {
-      await releaseBooking(reservation.id);
+      // Never booked here (or we can't tell): release the claim so it isn't charged; closeRequest then forgets the
+      // request (nothing was charged) so pressing Confirm again re-runs it.
+      if (!booked) await releaseBooking(reservation.id);
       await settleTurn(reservation.id);
-      await dropRequest(w.id, requestId);
       throw e instanceof HttpError ? e : new HttpError(502, "Couldn't save the booking. Please press Confirm again.");
     }
     await settleTurn(reservation.id);
@@ -466,7 +524,7 @@ export async function confirmBooking(
     }
     await pool.query("INSERT INTO conversation_messages (conversation_id, role, body) VALUES ($1, 'assistant', $2)", [c.id, reply]);
     return done({ conversationId: c.id, reply, booked });
-  }));
+  }), () => result);
 }
 
 

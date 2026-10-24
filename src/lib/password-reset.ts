@@ -57,6 +57,11 @@ export async function resetPassword(token: string, password: string, ip: string)
       [row.user_id, passwordHash],
     );
     await c.query("DELETE FROM password_resets WHERE user_id = $1", [row.user_id]);
+    // A reset also ends agent access granted before it: live tokens, connections allowed but not yet collected, and open
+    // key requests. The users row above is locked first, the same order pollLink takes, so a redemption can't slip past.
+    await c.query("UPDATE agent_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [row.user_id]);
+    await c.query("UPDATE agent_links SET state = 'revoked' WHERE user_id = $1 AND state IN ('pending','approved')", [row.user_id]);
+    await c.query("UPDATE key_grants SET status = 'superseded', decided_at = now() WHERE user_id = $1 AND status IN ('pending','approved')", [row.user_id]);
     return u ?? null;
   });
   if (!user) throw new HttpError(400, "This reset link is invalid or has expired. Ask for a new one.");

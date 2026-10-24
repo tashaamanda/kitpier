@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, usd } from "@/lib/client";
 import BookingPageSetup from "./BookingPageSetup";
 import BuyCredits from "./BuyCredits";
+import ConnectedAgents from "./ConnectedAgents";
 import { DemoInbox, DemoSwitch } from "./DemoConnection";
 import Planner from "./Planner";
 import ResendConnect from "./ResendConnect";
@@ -113,6 +114,7 @@ export default function ProjectView({
         </section>
         <BookingPageSetup key={rev} projectId={projectId} databaseReady={databaseReady} />
         {demo.on && <DemoInbox projectId={projectId} />}
+        <ConnectedAgents projectId={projectId} />
         <section id="credits" className="kp-panel">
           <h2 className="mb-4">Buy credits with PayPal</h2>
           <BuyCredits projectId={projectId} onPaid={load} />

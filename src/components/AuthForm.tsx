@@ -5,6 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 
+/** ?next= after signing in, same-site paths only (no //host or /\host), so the link can't send anyone off Kitpier. */
+function nextPath() {
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return /^\/(?![/\\])/.test(next) ? next : "/";
+}
+
 export default function AuthForm() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "signup">("signup");
@@ -24,7 +30,7 @@ export default function AuthForm() {
       } else {
         await api("/api/auth/login", { body: { email: f.get("email"), password: f.get("password") } });
       }
-      router.push("/");
+      router.push(nextPath());
       router.refresh();
     } catch (err) {
       setError((err as Error).message);

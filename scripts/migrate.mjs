@@ -16,6 +16,9 @@ try {
     if (done.has(file)) continue;
     await client.query("BEGIN");
     try {
+      // DDL waits for table locks. Fail fast instead of queueing behind a long transaction (and blocking every query
+      // queued behind us); rerun the script to retry. Override with MIGRATE_LOCK_TIMEOUT (e.g. "15s").
+      await client.query(`SET LOCAL lock_timeout = '${/^\d+(ms|s)$/.test(process.env.MIGRATE_LOCK_TIMEOUT ?? "") ? process.env.MIGRATE_LOCK_TIMEOUT : "5s"}'`);
       await client.query(readFileSync(dir + file, "utf8"));
       await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [file]);
       await client.query("COMMIT");

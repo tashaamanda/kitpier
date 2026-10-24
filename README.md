@@ -25,6 +25,25 @@ spend under a budget you set.
 7. **Budget enforcement**: each project has a monthly cap. At the cap, bookings pause before going over and the
    assistant offers a PayPal top-up.
 
+## Agents
+
+Your AI coding agent can do the same through Kitpier, while you keep the approvals and payments:
+
+- **`/llms.txt`** explains the flow to any agent; `/v1/catalog` and `/v1/openapi.json` are public.
+- **Connect:** the agent calls `POST /v1/agent/connect` and shows you a link. You sign in, pick one project and press
+  Allow; the agent's poll returns a `ka_…` token for that project only (30 days, revocable on the project page).
+- **Agent API** (`/v1/agent/*`, `Authorization: Bearer ka_…`): read status, plan, propose a booking page or database
+  setup, request a Booking API key, and get an **approval link**. On that page you approve the stack, pay with PayPal,
+  connect accounts and approve the key. The agent then collects the key once.
+- **MCP:** the same tools at `/mcp` (Streamable HTTP). Claude Code setup, with the token read from a private file:
+  ```json
+  { "mcpServers": { "kitpier": { "type": "http", "url": "https://kitpier.com/mcp",
+      "headers": { "Authorization": "Bearer ${KITPIER_AGENT_TOKEN}" } } } }
+  ```
+  then start Claude Code with `KITPIER_AGENT_TOKEN="$(cat ~/.config/kitpier/token)" claude`.
+- Agent tokens can't approve, pay, connect accounts or rotate keys; those routes take only your browser session. Code:
+  `src/lib/agents.ts`, `src/lib/approvals.ts`, `src/lib/agent-actions.ts`, `src/app/mcp/route.ts`.
+
 ## How PayPal is used
 
 | What | Where |
@@ -63,7 +82,10 @@ spend under a budget you set.
   (`src/lib/email.ts`).
 - Same-origin checks on every state-changing route, rate limits in Postgres, owner-only project access
   (`src/lib/http.ts`, `src/lib/session.ts`, `src/lib/projects.ts`).
-- Password reset with one-time, hashed, 30-minute tokens that end other sessions (`src/lib/password-reset.ts`).
+- Password reset with one-time, hashed, 30-minute tokens that end other sessions and all agent access
+  (`src/lib/password-reset.ts`).
+- Agent access: one-project tokens stored hashed, consent links that expire and work once, approval links bound to
+  exactly what they showed, HTTPS-only in production (`src/lib/agents.ts`, `src/lib/approvals.ts`).
 
 ## Run it locally
 
@@ -94,6 +116,8 @@ Every variable is listed in `.env.example`:
   account), and `PAYPAL_WEBHOOK_ID` after registering `<APP_URL>/api/paypal/webhook` for the events above.
   Webhooks need a public URL; locally use a tunnel.
 - `ANTHROPIC_API_KEY` and `PLATFORM_DAILY_AI_CAP_MICROS` (daily model-spend cap in micro-USD).
+- Production only: `CLIENT_IP_SOURCE` (required; which edge header holds the client IP) and `AGENT_CONNECT_ENABLED`
+  (`1` opens agent connections). See Deploy.
 - Optional: `SUPABASE_OAUTH_CLIENT_ID/SECRET` (a Supabase OAuth app with redirect
   `<APP_URL>/api/connect/supabase/callback`), `RESEND_API_KEY` + `MAIL_FROM` (password-reset email),
   `DEMO_SUPABASE_REF` + `DEMO_SUPABASE_SECRET_KEY` (demo connection; the table SQL is `DEMO_BOOKINGS_SQL` in
@@ -109,8 +133,20 @@ The tests run against the local test database (`TEST_DATABASE_URL`).
 
 ### Deploy
 
-On Render: create a Blueprint from `render.yaml`, set the secret variables, then run the migrations once against the
-hosted database (`MIGRATE_URL=<url> node scripts/migrate.mjs`) before the first deploy that needs them.
+On Render: create a Blueprint from `render.yaml` and set the secret variables. Then:
+
+1. Run the migrations against the hosted database before the deploy that needs them. Supply the URL without putting it
+   in shell history: `read -rs MIGRATE_URL && export MIGRATE_URL`, paste, `node scripts/migrate.mjs`,
+   `unset MIGRATE_URL`. Migrations are additive.
+2. Set `CLIENT_IP_SOURCE` (start with `xff-first`), leave `AGENT_CONNECT_ENABLED` unset, deploy.
+3. Verify the edge: send a sign-in with a made-up email, `Origin: <APP_URL>` and forged `X-Forwarded-For` /
+   `CF-Connecting-IP` / `X-Real-IP` values, then check which `login:<ip>` key appeared in `rate_limits`. Set
+   `CLIENT_IP_SOURCE` to the header that holds your real IP and that forged values can't change. Also check that
+   `http://` redirects to `https://` at the edge.
+4. Set `AGENT_CONNECT_ENABLED=1`.
+
+To end all agent access at once: unset `AGENT_CONNECT_ENABLED`, then run `node scripts/revoke-agent-access.mjs`
+(same `MIGRATE_URL` handling). That revokes credentials only; to roll back code, redeploy the previous release.
 `scripts/seed-judge.mjs [base-url]` builds the judges' demo account through the app's own API.
 
 ## Example: your own site calling the Booking API

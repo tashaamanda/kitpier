@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { newId, one, pool, type Db } from "./db";
+import { newId, one, pool, tx, type Db } from "./db";
 
 // Third-party secrets at rest (SPEC §7): AES-256-GCM, AAD = id|user_id|project_id|kind, key_version per row.
 // Decrypt only inside the server-side code that calls the provider. Never log, return or send plaintext to the model.
@@ -35,23 +35,31 @@ export function open(id: string, s: Scope, kind: CredentialKind, r: Omit<Row, "i
 }
 
 /** Insert or replace the credential of this kind for the project. Returns its id. */
-export async function putCredential(s: Scope, kind: CredentialKind, plaintext: string, meta: object = {}, q: Db = pool) {
-  const existing = await one<{ id: string }>(q, "SELECT id FROM credentials WHERE project_id = $1 AND kind = $2", [
-    s.projectId,
-    kind,
-  ]);
-  const id = existing?.id ?? newId("cred");
-  const e = seal(id, s, kind, plaintext);
-  await q.query(
-    `INSERT INTO credentials (id, user_id, project_id, kind, key_version, iv, ciphertext, tag, meta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (project_id, kind) DO UPDATE SET key_version = EXCLUDED.key_version, iv = EXCLUDED.iv,
-       ciphertext = EXCLUDED.ciphertext, tag = EXCLUDED.tag, meta = EXCLUDED.meta,
-       refresh_lock_until = NULL, updated_at = now()
-     WHERE credentials.user_id = EXCLUDED.user_id`,
-    [id, s.userId, s.projectId, kind, e.key_version, e.iv, e.ciphertext, e.tag, JSON.stringify(meta)],
-  );
-  return id;
+/**
+ * Stores (or replaces) one credential. The row id is part of the ciphertext's AAD, so two first writes racing must
+ * agree on it: a transaction-scoped advisory lock per (project, kind) serializes them, and each writer reads the
+ * persisted id under that lock before sealing. With a caller's client (`q`), the caller's transaction holds the lock.
+ */
+export async function putCredential(s: Scope, kind: CredentialKind, plaintext: string, meta: object = {}, q?: Db) {
+  const write = async (c: Db) => {
+    await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`credential:${s.projectId}:${kind}`]);
+    const existing = await one<{ id: string }>(c, "SELECT id FROM credentials WHERE project_id = $1 AND kind = $2", [s.projectId, kind]);
+    const id = existing?.id ?? newId("cred");
+    const e = seal(id, s, kind, plaintext);
+    const r = await c.query(
+      `INSERT INTO credentials (id, user_id, project_id, kind, key_version, iv, ciphertext, tag, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (project_id, kind) DO UPDATE SET key_version = EXCLUDED.key_version, iv = EXCLUDED.iv,
+         ciphertext = EXCLUDED.ciphertext, tag = EXCLUDED.tag, meta = EXCLUDED.meta,
+         refresh_lock_until = NULL, updated_at = now()
+       WHERE credentials.user_id = EXCLUDED.user_id AND credentials.id = EXCLUDED.id`,
+      [id, s.userId, s.projectId, kind, e.key_version, e.iv, e.ciphertext, e.tag, JSON.stringify(meta)],
+    );
+    // Not written: another user's row, or (can't happen under the lock) a row whose id differs from the AAD we sealed.
+    if (r.rowCount !== 1) throw new Error("Credential write conflict");
+    return id;
+  };
+  return q ? write(q) : tx(write);
 }
 
 /** Decrypted secret for (user, project, kind), or undefined. The user_id filter is the ownership check. */

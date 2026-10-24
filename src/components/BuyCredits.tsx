@@ -13,17 +13,24 @@ const PACKS = [
 
 type PackId = (typeof PACKS)[number]["id"];
 
-/** With topUpId, the pack is fixed by the assistant's top-up card and the picker is hidden. */
+/**
+ * With topUpId, the pack is fixed by the assistant's top-up card and the picker is hidden. budgetSeenMicros is the
+ * monthly budget the card showed; the server refuses checkout if it changed since (and approvalId must still be live).
+ */
 export default function BuyCredits({
   projectId,
   onPaid,
   fixedPack,
   topUpId,
+  budgetSeenMicros,
+  approvalId,
 }: {
   projectId: string;
   onPaid: () => void;
   fixedPack?: PackId;
   topUpId?: string;
+  budgetSeenMicros?: number | null;
+  approvalId?: string;
 }) {
   const [picked, setPack] = useState<PackId>("p10");
   const pack = fixedPack ?? picked;
@@ -33,6 +40,7 @@ export default function BuyCredits({
     return <p className="text-sm text-danger">PayPal isn&apos;t configured (NEXT_PUBLIC_PAYPAL_CLIENT_ID).</p>;
 
   return (
+    // Packs and the PayPal button fill the card edge to edge; disableMaxWidth lifts PayPal's 750px cap.
     <div className="space-y-3">
       {!fixedPack && (
       <div className="grid grid-cols-3 gap-2">
@@ -51,12 +59,12 @@ export default function BuyCredits({
       <PayPalScriptProvider options={{ clientId: CLIENT_ID, currency: "USD", intent: "capture" }}>
         <PayPalButtons
           forceReRender={[pack]}
-          style={{ layout: "vertical", shape: "pill", label: "pay", height: 45 }}
+          style={{ layout: "vertical", shape: "pill", label: "pay", height: 45, disableMaxWidth: true }}
           fundingSource="paypal"
           createOrder={async () => {
             setMsg(null);
             const { paypalOrderId } = await api<{ paypalOrderId: string }>("/api/orders", {
-              body: { projectId, pack, topUpId },
+              body: topUpId ? { projectId, pack, topUpId, budgetSeenMicros: budgetSeenMicros ?? null, approvalId } : { projectId, pack },
             });
             return paypalOrderId;
           }}

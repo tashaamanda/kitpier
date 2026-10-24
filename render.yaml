@@ -52,3 +52,10 @@ services:
         sync: false
       - key: DEMO_SUPABASE_SECRET_KEY
         sync: false
+      # Which header carries the real client IP at Render's edge (src/lib/session.ts). Required: set it before
+      # deploying, then verify with a forged header (docs/agent-review-brief.md).
+      - key: CLIENT_IP_SOURCE
+        sync: false
+      # "1" opens new agent connections; leave unset until CLIENT_IP_SOURCE is verified on this deployment.
+      - key: AGENT_CONNECT_ENABLED
+        sync: false

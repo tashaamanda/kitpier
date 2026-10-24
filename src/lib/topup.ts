@@ -4,9 +4,18 @@ import { HttpError } from "./session";
 import type { Scope } from "./stack";
 
 // Agent-proposed top-up (SPEC §3.6). The planner can only create this card. Paying happens in PayPal checkout,
-// and the pack amount and budget raise come from the server, applied once when the capture is credited.
+// and the pack amount and budget raise come from the server. The raise is applied once, when the capture is credited,
+// and only if the budget is still the one the owner saw (orders.ts).
 
-export type TopUp = { id: string; pack_id: PackId; amount_micros: number; budget_raise_micros: number; status: "proposed" | "paid"; created_at: string };
+export type TopUp = {
+  id: string;
+  pack_id: PackId;
+  amount_micros: number;
+  budget_before_micros: number | null;
+  budget_raise_micros: number;
+  status: "proposed" | "paid";
+  created_at: string;
+};
 
 /** A project with a monthly budget gets the pack amount added to it, so the paid credits can be spent this month. */
 function raiseFor(budget: number | null, packId: PackId) {
@@ -38,18 +47,25 @@ export async function listTopUps(q: Db, s: Scope): Promise<TopUp[]> {
     status: r.status,
     created_at: r.created_at,
     amount_micros: PACKS[r.pack_id].amountMicros,
+    budget_before_micros: r.budget,
     budget_raise_micros: raiseFor(r.budget, r.pack_id),
   }));
 }
 
-/** For order creation: the card must be this user's, this project's, still open, and for this pack. */
-export async function claimTopUpForOrder(q: Db, s: Scope, topUpId: string, packId: PackId) {
+/**
+ * For order creation, inside its transaction: the card must be this user's, this project's, still open and for this
+ * pack, and the monthly budget must still be the one the owner saw next to it (R4-1). The project row stays locked
+ * until the order row records that budget, so the consent and the order can't drift apart.
+ */
+export async function claimTopUpForOrder(c: Db, s: Scope, topUpId: string, packId: PackId, budgetSeen: number | null) {
   const r = await one<{ pack_id: PackId; budget: number | null }>(
-    q,
+    c,
     `SELECT t.pack_id, p.budget_micros AS budget FROM top_up_proposals t JOIN projects p ON p.id = t.project_id
-     WHERE t.id = $1 AND t.user_id = $2 AND t.project_id = $3 AND t.status = 'proposed'`,
+     WHERE t.id = $1 AND t.user_id = $2 AND t.project_id = $3 AND t.status = 'proposed' FOR UPDATE OF p`,
     [topUpId, s.userId, s.projectId],
   );
   if (!r || r.pack_id !== packId) throw new HttpError(409, "This top-up is no longer available. Ask the assistant again.");
-  return { budgetRaiseMicros: raiseFor(r.budget, packId) };
+  if (r.budget !== budgetSeen)
+    throw new HttpError(409, "This project's monthly budget changed since this was shown. Reload to see the new amounts.", "budget_changed");
+  return { budgetRaiseMicros: raiseFor(r.budget, packId), budgetBeforeMicros: r.budget };
 }

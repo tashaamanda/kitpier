@@ -1,3 +1,4 @@
+import type pg from "pg";
 import { newId, one, pool, tx } from "./db";
 import { HttpError } from "./session";
 
@@ -25,25 +26,45 @@ function dailyCap() {
   return cap;
 }
 
+/**
+ * Locks platform day rows in ascending order. Every path takes day rows before reservation or usage rows (R4-3);
+ * the sweeps (here and billing.ts) call this after locking today's row, for the older days they will settle.
+ */
+export async function lockDays(c: pg.PoolClient, days: string[]) {
+  await c.query("SELECT 1 FROM platform_daily_spend WHERE day = ANY($1::date[]) ORDER BY day FOR UPDATE", [[...new Set(days)]]);
+}
+
 /** Tx1: lock today's platform row, sweep expired runs, check the global cap, reserve. */
 export async function reservePlatform(userId: string, projectId: string, amount: number) {
   const day = today();
   return tx(async (c) => {
     await c.query("INSERT INTO platform_daily_spend (day) VALUES ($1) ON CONFLICT DO NOTHING", [day]);
     await c.query("SELECT 1 FROM platform_daily_spend WHERE day = $1 FOR UPDATE", [day]);
-    // Runs that never settled: charge what was recorded, count the unrecorded remainder as exposure.
-    await c.query(
-      `WITH x AS (
-         UPDATE platform_usage SET state = 'expired_settled'
-         WHERE day = $1 AND state = 'open' AND expires_at < now()
-         RETURNING reserved_micros, cost_micros)
-       UPDATE platform_daily_spend SET
-         reserved_micros  = reserved_micros  - COALESCE((SELECT SUM(reserved_micros) FROM x), 0),
-         committed_micros = committed_micros + COALESCE((SELECT SUM(cost_micros) FROM x), 0),
-         exposure_micros  = exposure_micros  + COALESCE((SELECT SUM(GREATEST(reserved_micros - cost_micros, 0)) FROM x), 0)
-       WHERE day = $1`,
-      [day],
+    // Runs that never settled, from any day (one stranded before midnight would otherwise stay open): charge what was
+    // recorded, count the unrecorded remainder as exposure, each against its own day's row. Bounded batch. Day rows
+    // are locked before the usage rows (R4-3), the same order settlePlatform uses.
+    const { rows: stale } = await c.query<{ id: string; day: string }>(
+      "SELECT id, to_char(day, 'YYYY-MM-DD') AS day FROM platform_usage WHERE state = 'open' AND expires_at < now() ORDER BY expires_at LIMIT 50",
     );
+    if (stale.length > 0) {
+      await lockDays(c, stale.map((r) => r.day));
+      await c.query(
+        `WITH x AS (
+           UPDATE platform_usage SET state = 'expired_settled'
+           WHERE id = ANY($1::text[]) AND state = 'open'
+           RETURNING day, reserved_micros, cost_micros),
+         per_day AS (
+           SELECT day, SUM(reserved_micros) AS reserved, SUM(cost_micros) AS cost,
+                  SUM(GREATEST(reserved_micros - cost_micros, 0)) AS exposure
+           FROM x GROUP BY day)
+         UPDATE platform_daily_spend d SET
+           reserved_micros  = d.reserved_micros  - per_day.reserved,
+           committed_micros = d.committed_micros + per_day.cost,
+           exposure_micros  = d.exposure_micros  + per_day.exposure
+         FROM per_day WHERE d.day = per_day.day`,
+        [stale.map((r) => r.id)],
+      );
+    }
     const d = await one<{ used: number }>(
       c,
       "SELECT (reserved_micros + committed_micros + exposure_micros)::bigint AS used FROM platform_daily_spend WHERE day = $1",

@@ -116,6 +116,13 @@ export async function accessToken(s: Scope): Promise<string> {
       await sleep(500); // someone else is refreshing; re-read their result
       continue;
     }
+    // Our read may predate a refresh that finished (and released the lock) before we claimed it. Refreshing with that
+    // stale, already-rotated refresh token would fail at Supabase, so re-read under the lock and use theirs instead.
+    const now = await getCredential(s, "supabase_oauth");
+    if (!now || (JSON.parse(now.secret) as Tokens).refresh_token !== t.refresh_token) {
+      await pool.query("UPDATE credentials SET refresh_lock_until = NULL WHERE id = $1", [cred.id]);
+      continue;
+    }
     let next: Tokens;
     try {
       next = await tokenRequest({ grant_type: "refresh_token", refresh_token: t.refresh_token });

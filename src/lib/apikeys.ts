@@ -1,6 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { PoolClient } from "pg";
 import { projectWidget } from "./booking";
 import { newId, one, pool, tx } from "./db";
+import { lockProject } from "./projects";
 import { HttpError } from "./session";
 import type { Scope } from "./stack";
 
@@ -12,22 +14,34 @@ const hash = (secret: string) => createHash("sha256").update(secret).digest();
 
 /** Mint a key for this project's booking page. The previous key stops working. Returns the full key once. */
 export async function createKey(s: Scope) {
+  return tx(async (c) => {
+    await lockProject(c, s.userId, s.projectId);
+    // A key made here changes what an agent's open request would replace, so that request needs fresh consent.
+    await c.query("UPDATE key_grants SET status = 'superseded', decided_at = now() WHERE user_id = $1 AND project_id = $2 AND status IN ('pending','approved')", [s.userId, s.projectId]);
+    return createKeyTx(c, s);
+  });
+}
+
+/** Same, inside the caller's transaction, which must already hold lockProject (an agent's approved grant is claimed and minted together). */
+export async function createKeyTx(c: PoolClient, s: Scope) {
   const w = await projectWidget(s);
   if (!w) throw new HttpError(409, "Publish your booking page first");
   const prefix = randomBytes(5).toString("hex");
   const secret = randomBytes(32).toString("base64url");
-  await tx(async (c) => {
-    await c.query("UPDATE api_keys SET revoked_at = now() WHERE user_id = $1 AND project_id = $2 AND revoked_at IS NULL", [s.userId, s.projectId]);
-    await c.query(
-      "INSERT INTO api_keys (id, user_id, project_id, widget_id, prefix, secret_hash) VALUES ($1, $2, $3, $4, $5, $6)",
-      [newId("key"), s.userId, s.projectId, w.id, prefix, hash(secret)],
-    );
-  });
+  await c.query("UPDATE api_keys SET revoked_at = now() WHERE user_id = $1 AND project_id = $2 AND revoked_at IS NULL", [s.userId, s.projectId]);
+  await c.query(
+    "INSERT INTO api_keys (id, user_id, project_id, widget_id, prefix, secret_hash) VALUES ($1, $2, $3, $4, $5, $6)",
+    [newId("key"), s.userId, s.projectId, w.id, prefix, hash(secret)],
+  );
   return { key: `mk_${prefix}_${secret}`, prefix };
 }
 
 export async function revokeKeys(s: Scope) {
-  await pool.query("UPDATE api_keys SET revoked_at = now() WHERE user_id = $1 AND project_id = $2 AND revoked_at IS NULL", [s.userId, s.projectId]);
+  await tx(async (c) => {
+    await lockProject(c, s.userId, s.projectId);
+    await c.query("UPDATE api_keys SET revoked_at = now() WHERE user_id = $1 AND project_id = $2 AND revoked_at IS NULL", [s.userId, s.projectId]);
+    await c.query("UPDATE key_grants SET status = 'superseded', decided_at = now() WHERE user_id = $1 AND project_id = $2 AND status IN ('pending','approved')", [s.userId, s.projectId]);
+  });
 }
 
 /** Display only: the prefix and dates, never the secret. */

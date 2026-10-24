@@ -227,11 +227,11 @@ describe("§3.6 recovery: paused → agent-proposed top-up → PayPal → resume
   const A = { userId: userA.id, projectId: `prj_${userA.id}` };
 
   async function seedTopUpOrder(id: string, topUpId: string) {
-    const { budgetRaiseMicros } = await claimTopUpForOrder(pool, A, topUpId, "p10");
+    const { budgetRaiseMicros, budgetBeforeMicros } = await claimTopUpForOrder(pool, A, topUpId, "p10", await budget());
     await pool.query(
-      `INSERT INTO orders (id, paypal_order_id, user_id, project_id, pack_id, amount_micros, top_up_id, budget_raise_micros)
-       VALUES ($1, $2, $3, $4, 'p10', 10000000, $5, $6)`,
-      [id, `PP_${id}`, A.userId, A.projectId, topUpId, budgetRaiseMicros],
+      `INSERT INTO orders (id, paypal_order_id, user_id, project_id, pack_id, amount_micros, top_up_id, budget_raise_micros, budget_before_micros)
+       VALUES ($1, $2, $3, $4, 'p10', 10000000, $5, $6, $7)`,
+      [id, `PP_${id}`, A.userId, A.projectId, topUpId, budgetRaiseMicros, budgetBeforeMicros],
     );
   }
   const budget = async () => (await pool.query("SELECT budget_micros FROM projects WHERE id = $1", [A.projectId])).rows[0].budget_micros;
@@ -266,12 +266,12 @@ describe("§3.6 recovery: paused → agent-proposed top-up → PayPal → resume
     await pool.query("UPDATE projects SET budget_micros = 1000000 WHERE id = $1", [A.projectId]);
     const old = await proposeTopUp(A, "p10");
     const t = await proposeTopUp(A, "p10");
-    await expect(claimTopUpForOrder(pool, A, old.id, "p10")).rejects.toMatchObject({ status: 409 }); // superseded
-    await expect(claimTopUpForOrder(pool, A, t.id, "p50")).rejects.toMatchObject({ status: 409 });
-    await expect(claimTopUpForOrder(pool, { userId: userB.id, projectId: `prj_${userB.id}` }, t.id, "p10")).rejects.toMatchObject({ status: 409 });
+    await expect(claimTopUpForOrder(pool, A, old.id, "p10", 1000000)).rejects.toMatchObject({ status: 409 }); // superseded
+    await expect(claimTopUpForOrder(pool, A, t.id, "p50", 1000000)).rejects.toMatchObject({ status: 409 });
+    await expect(claimTopUpForOrder(pool, { userId: userB.id, projectId: `prj_${userB.id}` }, t.id, "p10", 1000000)).rejects.toMatchObject({ status: 409 });
     await seedTopUpOrder("ord_t", t.id);
     await applyVerifiedOrder("ord_t", ppOrder({ orderId: "ord_t" }));
-    await expect(claimTopUpForOrder(pool, A, t.id, "p10")).rejects.toMatchObject({ status: 409 }); // already paid
+    await expect(claimTopUpForOrder(pool, A, t.id, "p10", await budget())).rejects.toMatchObject({ status: 409 }); // already paid
   });
 
   it("no budget set → credits only, budget untouched", async () => {

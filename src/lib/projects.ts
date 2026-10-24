@@ -19,6 +19,15 @@ export async function requireProjectOwner(user: User, projectId: string, q: Db =
   return p;
 }
 
+/**
+ * Serializes key changes on one project: browser key creation and revocation, and an agent collecting an approved key.
+ * Take it first inside the transaction. Not yours → 404.
+ */
+export async function lockProject(c: Db, userId: string, projectId: string) {
+  const p = await one(c, "SELECT 1 FROM projects WHERE id = $1 AND user_id = $2 FOR UPDATE", [projectId, userId]);
+  if (!p) throw new HttpError(404, "Project not found");
+}
+
 export function listProjects(user: User) {
   return many<Project>(pool, "SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC", [user.id]);
 }

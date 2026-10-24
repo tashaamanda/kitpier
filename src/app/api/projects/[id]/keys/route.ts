@@ -1,5 +1,5 @@
 import { createKey, liveKey, revokeKeys } from "@/lib/apikeys";
-import { rateLimit, route } from "@/lib/http";
+import { noStore, rateLimit, route } from "@/lib/http";
 import { requireProjectOwner } from "@/lib/projects";
 import { requireUser } from "@/lib/session";
 
@@ -18,7 +18,7 @@ export const POST = route(
   async (_req: Request, ctx: Ctx) => {
     const s = await scope(ctx);
     await rateLimit(`key-issue:${s.userId}`, 10, 24 * 60 * 60_000);
-    return createKey(s);
+    return noStore(await createKey(s));
   },
   { mutating: true },
 );
