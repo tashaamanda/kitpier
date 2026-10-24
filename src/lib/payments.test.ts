@@ -8,7 +8,7 @@ vi.mock("./paypal", async (orig) => {
 
 const { pool } = await import("./db");
 const paypal = await import("./paypal");
-const { applyVerifiedOrder, captureForUser } = await import("./orders");
+const { admitCapture, applyVerifiedOrder, captureForUser, settleClosedCheckout } = await import("./orders");
 const { handleVerifiedEvent } = await import("./webhooks");
 const { post, postedBalance } = await import("./ledger");
 const { bookingPause } = await import("./billing");
@@ -146,6 +146,101 @@ describe("approved webhook (browser never captured)", () => {
       await handleVerifiedEvent({ id: "WH-X", event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "PP_nope" } }),
     ).toBe("ignored:unknown_order");
     expect(paypal.captureOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("PayPal window closed (onCancel)", () => {
+  // Live 24 Oct: the window said cancelled after the buyer approved; the page told them nothing was paid and they paid again.
+  it("approved at PayPal → captured and credited once, not reported as cancelled", async () => {
+    await seedOrder("ord_1");
+    vi.mocked(paypal.getOrder)
+      .mockResolvedValueOnce({ ...ppOrder({ orderId: "ord_1" }), status: "APPROVED" })
+      .mockResolvedValue(ppOrder({ orderId: "ord_1" }));
+    vi.mocked(paypal.captureOrder).mockResolvedValue(ppOrder({ orderId: "ord_1" }));
+    expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status: "credited" });
+    expect(paypal.captureOrder).toHaveBeenCalledTimes(1);
+    // The APPROVED webhook arriving afterwards changes nothing.
+    await handleVerifiedEvent({ id: "WH-A", event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "PP_ord_1" } });
+    expect(paypal.captureOrder).toHaveBeenCalledTimes(1);
+    expect(await balance()).toBe(10_000_000);
+  });
+
+  it("already credited by the webhook → reports credited without calling PayPal", async () => {
+    await seedOrder("ord_1");
+    vi.mocked(paypal.captureOrder).mockResolvedValue(ppOrder({ orderId: "ord_1" }));
+    vi.mocked(paypal.getOrder).mockResolvedValue(ppOrder({ orderId: "ord_1" }));
+    await handleVerifiedEvent({ id: "WH-A", event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "PP_ord_1" } });
+    vi.mocked(paypal.getOrder).mockClear();
+    expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status: "credited" });
+    expect(paypal.getOrder).not.toHaveBeenCalled();
+    expect(await balance()).toBe(10_000_000);
+  });
+
+  it("not approved → cancelled, and a late APPROVED webhook doesn't charge it", async () => {
+    await seedOrder("ord_1");
+    vi.mocked(paypal.getOrder).mockResolvedValue({ ...ppOrder({ orderId: "ord_1" }), status: "PAYER_ACTION_REQUIRED" });
+    expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status: "cancelled" });
+    expect(paypal.captureOrder).not.toHaveBeenCalled();
+    const { status } = (await pool.query("SELECT status FROM orders WHERE id = 'ord_1'")).rows[0];
+    expect(status).toBe("cancelled");
+    // The buyer approves late: PayPal now says APPROVED, nothing captured. We must not capture a cancelled checkout.
+    const late = ppOrder({ orderId: "ord_1" });
+    vi.mocked(paypal.getOrder).mockResolvedValue({
+      ...late,
+      status: "APPROVED",
+      purchase_units: late.purchase_units.map((u) => ({ ...u, payments: undefined })),
+    });
+    await handleVerifiedEvent({ id: "WH-L", event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "PP_ord_1" } });
+    expect(paypal.captureOrder).not.toHaveBeenCalled();
+    expect(await balance()).toBe(0);
+  });
+
+  // Codex closed-checkout review (docs/closed-checkout-review-2026-10-24.md): a credit landing during the PayPal read
+  // was reported as cancelled.
+  it("webhook credits while PayPal is being asked → credited, never cancelled", async () => {
+    await seedOrder("ord_1");
+    vi.mocked(paypal.getOrder).mockImplementationOnce(async () => {
+      await applyVerifiedOrder("ord_1", ppOrder({ orderId: "ord_1" })); // lands mid-read
+      return { ...ppOrder({ orderId: "ord_1" }), status: "PAYER_ACTION_REQUIRED", purchase_units: [] };
+    });
+    expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status: "credited" });
+    expect((await pool.query("SELECT status FROM orders WHERE id = 'ord_1'")).rows[0].status).toBe("credited");
+    expect(await balance()).toBe(10_000_000);
+  });
+
+  it("capture admitted but not finished → checking; not cancelled, hold kept, PayPal not asked", async () => {
+    await pool.query("INSERT INTO orders (id, paypal_order_id, user_id, project_id, pack_id, amount_micros, quota_until) VALUES ('ord_1', 'PP_ord_1', $1, $2, 'p10', 10000000, now() + interval '15 minutes')", [userA.id, `prj_${userA.id}`]);
+    expect(await admitCapture("ord_1")).toBe(true); // the browser or webhook capture is now calling PayPal
+    expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status: "checking" });
+    expect(paypal.getOrder).not.toHaveBeenCalled();
+    const o = (await pool.query("SELECT status, quota_until > now() AS held FROM orders WHERE id = 'ord_1'")).rows[0];
+    expect(o).toEqual({ status: "approved", held: true });
+  });
+
+  it("admitted while PayPal is being asked → the cancel loses and reports checking", async () => {
+    await pool.query("INSERT INTO orders (id, paypal_order_id, user_id, project_id, pack_id, amount_micros, quota_until) VALUES ('ord_1', 'PP_ord_1', $1, $2, 'p10', 10000000, now() + interval '15 minutes')", [userA.id, `prj_${userA.id}`]);
+    vi.mocked(paypal.getOrder).mockImplementationOnce(async () => {
+      await admitCapture("ord_1"); // APPROVED webhook admits its capture mid-read
+      return { ...ppOrder({ orderId: "ord_1" }), status: "PAYER_ACTION_REQUIRED", purchase_units: [] };
+    });
+    expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status: "checking" });
+    expect((await pool.query("SELECT status FROM orders WHERE id = 'ord_1'")).rows[0].status).toBe("approved");
+  });
+
+  for (const status of ["capture_pending", "reversed", "failed", "cancelled"] as const) {
+    it(`already ${status} → reported as ${status}, PayPal not asked, nothing changes`, async () => {
+      await seedOrder("ord_1");
+      await pool.query("UPDATE orders SET status = $1 WHERE id = 'ord_1'", [status]);
+      expect(await settleClosedCheckout(userA, "PP_ord_1")).toEqual({ status });
+      expect(paypal.getOrder).not.toHaveBeenCalled();
+      expect((await pool.query("SELECT status FROM orders WHERE id = 'ord_1'")).rows[0].status).toBe(status);
+    });
+  }
+
+  it("another user's order → 404 and PayPal is never called", async () => {
+    await seedOrder("ord_1", userA);
+    await expect(settleClosedCheckout(userB, "PP_ord_1")).rejects.toMatchObject({ status: 404 });
+    expect(paypal.getOrder).not.toHaveBeenCalled();
   });
 });
 

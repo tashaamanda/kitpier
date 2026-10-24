@@ -138,10 +138,11 @@ On Render: create a Blueprint from `render.yaml` and set the secret variables. T
 1. Run the migrations against the hosted database before the deploy that needs them. Supply the URL without putting it
    in shell history: `read -rs MIGRATE_URL && export MIGRATE_URL`, paste, `node scripts/migrate.mjs`,
    `unset MIGRATE_URL`. Migrations are additive.
-2. Set `CLIENT_IP_SOURCE` (start with `xff-first`), leave `AGENT_CONNECT_ENABLED` unset, deploy.
+2. Set `CLIENT_IP_SOURCE` (on Render: `cf-connecting-ip`; `xff-first` is forgeable there), leave
+   `AGENT_CONNECT_ENABLED` unset, deploy.
 3. Verify the edge: send a sign-in with a made-up email, `Origin: <APP_URL>` and forged `X-Forwarded-For` /
-   `CF-Connecting-IP` / `X-Real-IP` values, then check which `login:<ip>` key appeared in `rate_limits`. Set
-   `CLIENT_IP_SOURCE` to the header that holds your real IP and that forged values can't change. Also check that
+   `X-Real-IP` values, then check which `login:<ip>` key appeared in `rate_limits`. It must be your real IP, not a
+   forged one. (Render's Cloudflare edge rejects a forged `CF-Connecting-IP` outright with error 1000.) Also check that
    `http://` redirects to `https://` at the edge.
 4. Set `AGENT_CONNECT_ENABLED=1`.
 

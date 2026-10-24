@@ -111,7 +111,12 @@ export async function admitCapture(orderId: string) {
     const order = await one<OrderRow & { held: boolean }>(c, "SELECT *, quota_until > now() AS held FROM orders WHERE id = $1 FOR UPDATE", [orderId]);
     if (!order || order.status === "cancelled") return false;
     if (!["created", "approved", "failed"].includes(order.status)) return true; // already captured: just verify it
-    if (order.status !== "failed" && order.held) return true;
+    // Admitting marks the order 'approved' (a capture is in flight). A closed-window cancel only cancels 'created'
+    // orders, so it can never cancel, or release the hold of, a checkout we're already capturing.
+    if (order.status !== "failed" && order.held) {
+      await c.query("UPDATE orders SET status = 'approved', updated_at = now() WHERE id = $1 AND status = 'created'", [order.id]);
+      return true;
+    }
     try {
       await checkAllowance(c, order.user_id, order.amount_micros, order.id);
     } catch (e) {
@@ -120,7 +125,7 @@ export async function admitCapture(orderId: string) {
       return false;
     }
     await c.query(
-      `UPDATE orders SET status = CASE WHEN status = 'failed' THEN 'approved' ELSE status END,
+      `UPDATE orders SET status = 'approved',
          quota_until = now() + ($2 || ' minutes')::interval, updated_at = now() WHERE id = $1`,
       [order.id, String(CHECKOUT_HOLD_MINUTES)],
     );
@@ -233,4 +238,39 @@ export async function captureForUser(user: User, paypalOrderId: string) {
   }
   const status = await applyVerifiedOrder(order.id, await getOrder(paypalOrderId));
   return { status };
+}
+
+/** What a closed PayPal window means for an order already past "created": the truth, never a guessed cancel. */
+function closedOutcome(status: OrderRow["status"]) {
+  switch (status) {
+    case "created":
+      return null;
+    case "approved":
+      return { status: "checking" as const }; // a capture is in flight; its result arrives by capture or webhook
+    default:
+      return { status };
+  }
+}
+
+/**
+ * The PayPal window reported "cancelled", but it can close after the buyer approved (seen live: the page said
+ * cancelled, the APPROVED webhook captured, and the buyer paid again). Ask PayPal before saying nothing happened:
+ * approved or completed → the normal capture. Otherwise cancel, but only if the order is still 'created'; if that
+ * loses to a capture or credit that started meanwhile, report the order's real state instead. A cancelled order
+ * releases its sandbox hold, and a late APPROVED webhook won't capture it (it only captures created/approved).
+ */
+export async function settleClosedCheckout(user: User, paypalOrderId: string) {
+  const load = () =>
+    one<OrderRow>(pool, "SELECT * FROM orders WHERE paypal_order_id = $1 AND user_id = $2", [paypalOrderId, user.id]);
+  const order = await load();
+  if (!order) throw new HttpError(404, "Order not found");
+  const known = closedOutcome(order.status);
+  if (known) return known;
+  const pp = await getOrder(paypalOrderId);
+  if (pp.status === "APPROVED" || pp.status === "COMPLETED") return captureForUser(user, paypalOrderId);
+  const r = await pool.query("UPDATE orders SET status = 'cancelled', updated_at = now() WHERE id = $1 AND status = 'created'", [
+    order.id,
+  ]);
+  if (r.rowCount) return { status: "cancelled" as const };
+  return closedOutcome((await load())!.status) ?? { status: "checking" as const };
 }

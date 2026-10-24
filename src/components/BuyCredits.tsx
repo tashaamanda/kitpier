@@ -84,7 +84,29 @@ export default function BuyCredits({
               setMsg({ kind: "err", text: (e as Error).message });
             }
           }}
-          onCancel={() => setMsg({ kind: "err", text: "Checkout cancelled. No credits were added." })}
+          onCancel={async (data) => {
+            // The window can close after the buyer approved, so ask before saying nothing was paid.
+            setMsg({ kind: "ok", text: "Checking with PayPal…" });
+            try {
+              const r = await api<{ status: string }>(`/api/orders/${data.orderID}/closed`, { method: "POST", body: {} });
+              const text: Record<string, ["ok" | "err", string]> = {
+                cancelled: ["err", "Checkout cancelled. No credits were added."],
+                credited: ["ok", "Payment verified. Credits added."],
+                capture_pending: ["ok", "Payment is pending at PayPal. Credits appear when it clears."],
+                checking: ["ok", "PayPal is still finishing this payment. Please don't pay again: your credits appear here shortly."],
+                failed: ["err", "PayPal declined this payment. No credits were added."],
+                reversed: ["err", "This payment was reversed at PayPal, so it added no credits."],
+              };
+              const [kind, t] = text[r.status] ?? text.checking;
+              setMsg({ kind, text: t });
+              if (r.status !== "cancelled") {
+                onPaid();
+                if (r.status === "checking" || r.status === "capture_pending") setTimeout(onPaid, 15_000);
+              }
+            } catch (e) {
+              setMsg({ kind: "err", text: (e as Error).message });
+            }
+          }}
           onError={(e) => setMsg({ kind: "err", text: String(e?.message ?? "PayPal couldn't complete the payment") })}
         />
       </PayPalScriptProvider>
