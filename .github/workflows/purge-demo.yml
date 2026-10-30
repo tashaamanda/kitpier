@@ -1,0 +1,21 @@
+# Daily cleanup of "Try the demo" data on kitpier.com (src/lib/demo-purge.ts): bookings and emails after 48 hours,
+# demo accounts after 45 days. Needs the repository secret KITPIER_CRON_SECRET (= CRON_SECRET on Render).
+# A failed run (Render waking up, Supabase down) shows as a failed job and is retried by the next day's run.
+name: Purge demo data
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call the cleanup endpoint
+        env:
+          CRON_SECRET: ${{ secrets.KITPIER_CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET" || { echo "KITPIER_CRON_SECRET is not set"; exit 1; }
+          curl --fail-with-body -sS --retry 4 --retry-delay 30 --retry-all-errors --max-time 120 \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" https://kitpier.com/api/cron/purge-demo

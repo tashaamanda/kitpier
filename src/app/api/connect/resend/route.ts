@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { deleteCredential } from "@/lib/credentials";
+import { refuseDemoAccount } from "@/lib/demo-account";
 import { body, rateLimit, route } from "@/lib/http";
 import { requireProjectOwner } from "@/lib/projects";
 import { connectResend } from "@/lib/resend";
@@ -12,6 +13,7 @@ const Connect = Project.extend({ apiKey: z.string().trim().regex(/^re_[A-Za-z0-9
 export const POST = route(
   async (req: Request) => {
     const user = await requireUser();
+    refuseDemoAccount(user);
     await rateLimit(`connect:${user.id}`, 20, 60 * 60_000);
     const input = await body(req, Connect);
     const project = await requireProjectOwner(user, input.projectId);

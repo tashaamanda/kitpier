@@ -56,6 +56,9 @@ services:
       # deploying, then verify with a forged header (docs/agent-review-brief.md).
       - key: CLIENT_IP_SOURCE
         sync: false
+      # 32+ random chars; the same value is the GitHub secret KITPIER_CRON_SECRET (daily demo-data cleanup).
+      - key: CRON_SECRET
+        sync: false
       # "1" opens new agent connections; leave unset until CLIENT_IP_SOURCE is verified on this deployment.
       - key: AGENT_CONNECT_ENABLED
         sync: false

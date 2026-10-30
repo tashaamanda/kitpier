@@ -33,15 +33,16 @@ export type PauseReason = "on_hold" | "credits" | "budget" | "daily_limit";
 async function pauseReason(c: Db, s: Scope, project: ProjectLimits, amount: number): Promise<PauseReason | null> {
   if (project.frozen) return "on_hold";
   if ((await spendable(c, s.userId)) < amount) return "credits";
-  // Project spend = posted usage debits + what open reservations could still charge.
+  // Project spend = posted usage debits + what open reservations could still charge. Days and months are UTC, like
+  // today(), whatever the database's own timezone setting is.
   const spent = await one<{ month: number; day: number }>(
     c,
     `SELECT
        (COALESCE((SELECT -SUM(amount_micros) FROM ledger_entries WHERE project_id = $1 AND kind = 'usage'
-          AND created_at >= date_trunc('month', now())), 0)
+          AND created_at >= date_trunc('month', now(), 'UTC')), 0)
         + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS month,
        (COALESCE((SELECT -SUM(amount_micros) FROM ledger_entries WHERE project_id = $1 AND kind = 'usage'
-          AND created_at >= date_trunc('day', now())), 0)
+          AND created_at >= date_trunc('day', now(), 'UTC')), 0)
         + COALESCE((SELECT SUM(amount_micros) FROM reservations WHERE project_id = $1 AND state = 'open'), 0))::bigint AS day`,
     [s.projectId],
   );

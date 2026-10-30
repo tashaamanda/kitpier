@@ -1,6 +1,7 @@
 import { approvalView } from "@/lib/approvals";
 import { many, pool } from "@/lib/db";
 import { demoConfig } from "@/lib/demo";
+import { isDemoAccount } from "@/lib/demo-account";
 import { route } from "@/lib/http";
 import { requireUser } from "@/lib/session";
 import { projectStatus } from "@/lib/stack";
@@ -25,5 +26,6 @@ export const GET = route(async (_req: Request, ctx: { params: Promise<{ id: stri
     connections,
     approvedStack: (stack.rows[0]?.items as { slug: string }[] | undefined)?.map((i) => i.slug) ?? [],
     demoAvailable: !!demoConfig(),
+    demoAccount: isDemoAccount(user.email),
   };
 });

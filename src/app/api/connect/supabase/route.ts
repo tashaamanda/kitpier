@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { refuseDemoAccount } from "@/lib/demo-account";
 import { body, rateLimit, route } from "@/lib/http";
 import { requireProjectOwner } from "@/lib/projects";
 import { requireUser } from "@/lib/session";
@@ -10,6 +11,7 @@ const Input = z.object({ projectId: z.string().min(1).max(64) });
 export const POST = route(
   async (req: Request) => {
     const user = await requireUser();
+    refuseDemoAccount(user);
     await rateLimit(`connect:${user.id}`, 20, 60 * 60_000);
     const project = await requireProjectOwner(user, (await body(req, Input)).projectId);
     return { url: await startConnect({ userId: user.id, projectId: project.id }) };

@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CatalogShell } from "@/components/CatalogShell";
-import { JUDGE_BOOKING_PAGE_ID, JUDGE_EMAIL, JUDGE_PROJECT_ID } from "@/lib/judge";
+import { TryDemoRow } from "@/components/TryDemo";
 
 export const metadata: Metadata = { title: "For judges · Kitpier" };
 
-const project = `/projects/${JUDGE_PROJECT_ID}`;
-const bookingPage = `/r/${JUDGE_BOOKING_PAGE_ID}`;
-
-// A 3-minute guided path, not documentation. Logins stay in Devpost's private testing field: this page is public.
+// A 3-minute guided path, not documentation. The demo needs no login; only the PayPal sandbox buyer stays in Devpost's
+// private testing field, since this page is public.
 export default function JudgesPage() {
   return (
     <CatalogShell>
@@ -25,27 +23,9 @@ export default function JudgesPage() {
       <section className="ct-cat" aria-labelledby="fast-h">
         <h2 id="fast-h">Fast path</h2>
         <ol className="ct-rows m-0 list-none p-0">
+          <TryDemoRow />
           <li className="ct-row ct-static">
-            <span className="name">1. Sign in</span>
-            <Link href="/signin" className="kp-btn-outline kp-btn-xs">
-              Sign in
-            </Link>
-            <span className="tag">
-              Use the judge account ({JUDGE_EMAIL}). The password is in the Devpost testing instructions.
-            </span>
-          </li>
-          <li className="ct-row ct-static">
-            <span className="name">2. Open Sam&apos;s Barbershop</span>
-            <Link href={project} className="kp-btn-outline kp-btn-xs">
-              Open project
-            </Link>
-            <span className="tag">
-              A booking page Kitpier already planned and set up, on the demo connection: no Supabase or Resend account
-              needed.
-            </span>
-          </li>
-          <li className="ct-row ct-static">
-            <span className="name">3. Buy $10 of credits</span>
+            <span className="name">2. Buy $10 of credits</span>
             <span className="kp-kind buy micro">PayPal sandbox</span>
             <span className="tag">
               On the project page, choose $10 and pay with the PayPal sandbox buyer from the Devpost instructions.
@@ -53,17 +33,15 @@ export default function JudgesPage() {
             </span>
           </li>
           <li className="ct-row ct-static">
-            <span className="name">4. Book a haircut</span>
-            <Link href={bookingPage} className="kp-btn-outline kp-btn-xs">
-              Booking page
-            </Link>
+            <span className="name">3. Book a haircut</span>
+            <span className="kp-kind micro">Booking page</span>
             <span className="tag">
-              Type: &ldquo;A haircut on Tuesday at 10am. I&apos;m Jo, jo@example.com.&rdquo; The assistant checks open
+              Open the booking page link on your project page and type: &ldquo;A haircut on Tuesday at 10am. I&apos;m Jo, jo@example.com.&rdquo; The assistant checks open
               times and shows a booking card.
             </span>
           </li>
           <li className="ct-row ct-static">
-            <span className="name">5. Get the code</span>
+            <span className="name">4. Get the code</span>
             <span className="kp-kind micro">Demo inbox</span>
             <span className="tag">
               Tap &ldquo;Email me a confirmation&rdquo;. Demo emails are captured, not sent: find the 6-digit code in the
@@ -71,10 +49,8 @@ export default function JudgesPage() {
             </span>
           </li>
           <li className="ct-row ct-static">
-            <span className="name">6. Check the result</span>
-            <Link href={project} className="kp-btn-outline kp-btn-xs">
-              Back to project
-            </Link>
+            <span className="name">5. Check the result</span>
+            <span className="kp-kind micro">Your project</span>
             <span className="tag">
               The booking is in the Demo inbox, the confirmation email beside it, and the ledger shows each message and
               the booking charged against the $30 monthly cap.
@@ -89,8 +65,7 @@ export default function JudgesPage() {
           Prefer to start from nothing? <Link href="/signin" className="underline">Create your own account</Link>, then
           describe an app on the <Link href="/catalog#build" className="underline">catalog</Link>, approve the stack the
           planner proposes, switch on &ldquo;Use demo connection&rdquo;, approve the booking page, buy credits and book.
-          About eight minutes. Sandbox purchases are limited to three packs ($75) per account per day, so your own account also
-          avoids sharing that limit with other judges.
+          About eight minutes. Every account, demo or your own, has its own sandbox limit of three packs ($75) a day.
         </p>
       </section>
 
@@ -108,7 +83,7 @@ export default function JudgesPage() {
             <span className="kp-kind micro">Your agent</span>
             <span className="tag">
               In an empty folder, ask: &ldquo;Read kitpier.com/llms.txt and connect to Kitpier, new project &lsquo;Agent
-              test&rsquo;.&rdquo; Open the link it shows, sign in with the judge account, choose the project and press Allow.
+              test&rsquo;.&rdquo; Open the link it shows in the browser where you started the demo (or sign in to your own account), choose the project and press Allow.
               The agent saves its token to a private file, never in chat.
             </span>
           </li>

@@ -6,7 +6,7 @@ import { api, usd } from "@/lib/client";
 import BookingPageSetup from "./BookingPageSetup";
 import BuyCredits from "./BuyCredits";
 import ConnectedAgents from "./ConnectedAgents";
-import { DemoInbox, DemoSwitch } from "./DemoConnection";
+import { DemoInbox, DemoResumeLink, DemoSwitch } from "./DemoConnection";
 import Planner from "./Planner";
 import ResendConnect from "./ResendConnect";
 import SupabaseConnect, { type Connection } from "./SupabaseConnect";
@@ -30,7 +30,7 @@ export default function ProjectView({
   const [balance, setBalance] = useState(0);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [databaseReady, setDatabaseReady] = useState(false);
-  const [demo, setDemo] = useState({ on: false, available: false });
+  const [demo, setDemo] = useState({ on: false, available: false, locked: false });
   const [rev, setRev] = useState(0); // bumps after every reload so the planner's checklist refreshes too
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [autoStart] = useState(
@@ -57,6 +57,7 @@ export default function ProjectView({
         databaseReady: boolean;
         demo: boolean;
         demoAvailable: boolean;
+        demoAccount: boolean;
       }>(`/api/projects/${projectId}`),
       api<{ balanceMicros: number }>("/api/me"),
     ]);
@@ -64,7 +65,7 @@ export default function ProjectView({
     setOrders(p.orders);
     setConnections(p.connections);
     setDatabaseReady(p.databaseReady);
-    setDemo({ on: p.demo, available: p.demoAvailable });
+    setDemo({ on: p.demo, available: p.demoAvailable, locked: p.demoAccount });
     setRev((r) => r + 1);
     setBalance(me.balanceMicros);
   }, [projectId]);
@@ -90,11 +91,12 @@ export default function ProjectView({
             <span className="app-figure">{usd(balance)}</span>
           </div>
         </header>
+        {demo.locked && <DemoResumeLink />}
         {notice && <p className={`kp-note ${notice.ok ? "" : "kp-note-danger text-danger"}`}>{notice.text}</p>}
         <Planner projectId={projectId} description={description} autoStart={autoStart} rev={rev} onApproved={load} />
         <section id="accounts" className="kp-panel">
           <h2 className="mb-4">Your accounts</h2>
-          <DemoSwitch projectId={projectId} on={demo.on} available={demo.available} onChange={load} />
+          <DemoSwitch projectId={projectId} on={demo.on} available={demo.available} locked={demo.locked} onChange={load} />
           {!demo.on && (
             <>
               <div className="my-4" />

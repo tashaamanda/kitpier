@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
+import { LIVE_ACCOUNT } from "./account-expiry";
 import { projectWidget } from "./booking";
 import { newId, one, pool, tx } from "./db";
 import { lockProject } from "./projects";
@@ -60,8 +61,8 @@ export async function requireApiKey(req: Request) {
   if (!m) throw denied;
   const row = await one<{ id: string; widget_id: string; secret_hash: Buffer }>(
     pool,
-    `SELECT k.id, k.widget_id, k.secret_hash FROM api_keys k JOIN widgets w ON w.id = k.widget_id
-     WHERE k.prefix = $1 AND k.revoked_at IS NULL AND w.active`,
+    `SELECT k.id, k.widget_id, k.secret_hash FROM api_keys k JOIN widgets w ON w.id = k.widget_id JOIN users u ON u.id = w.user_id
+     WHERE k.prefix = $1 AND k.revoked_at IS NULL AND w.active AND ${LIVE_ACCOUNT}`,
     [m[1]],
   );
   if (!row || !timingSafeEqual(hash(m[2]), row.secret_hash)) throw denied;

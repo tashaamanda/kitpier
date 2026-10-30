@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { LIVE_ACCOUNT } from "./account-expiry";
 import { appOrigin } from "./app-url";
 import { many, newId, one, pool, tx } from "./db";
 import { createProject } from "./projects";
@@ -171,9 +172,9 @@ export async function requireAgentToken(req: Request): Promise<AgentCaller> {
   if (!m) throw denied;
   const row = await one<{ id: string; user_id: string; project_id: string; secret_hash: Buffer }>(
     pool,
-    `SELECT id, user_id, project_id, secret_hash FROM agent_tokens
-     WHERE prefix = $1 AND revoked_at IS NULL AND expires_at > now()
-       AND (last_used_at IS NOT NULL OR created_at > now() - interval '24 hours')`,
+    `SELECT t.id, t.user_id, t.project_id, t.secret_hash FROM agent_tokens t JOIN users u ON u.id = t.user_id
+     WHERE t.prefix = $1 AND t.revoked_at IS NULL AND t.expires_at > now()
+       AND (t.last_used_at IS NOT NULL OR t.created_at > now() - interval '24 hours') AND ${LIVE_ACCOUNT}`,
     [m[1]],
   );
   if (!row || !timingSafeEqual(sha(m[2]), row.secret_hash)) throw denied;

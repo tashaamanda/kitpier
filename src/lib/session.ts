@@ -2,6 +2,7 @@ import { isIP } from "node:net";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
+import { LIVE_ACCOUNT } from "./account-expiry";
 import { appOrigin } from "./app-url";
 import { one, pool } from "./db";
 
@@ -35,13 +36,18 @@ export async function getSession() {
 }
 
 export async function currentUser(): Promise<User | null> {
-  const session = await getSession();
+  return sessionUser(await getSession());
+}
+
+/** The account a session cookie stands for, if its version is current and (for a demo) it hasn't expired. */
+export async function sessionUser(session: SessionData): Promise<User | null> {
   if (!session.userId) return null;
   return (
-    (await one<User>(pool, "SELECT id, email, name, frozen, session_version FROM users WHERE id = $1 AND session_version = $2", [
-      session.userId,
-      session.v ?? 0,
-    ])) ?? null
+    (await one<User>(
+      pool,
+      `SELECT u.id, u.email, u.name, u.frozen, u.session_version FROM users u WHERE u.id = $1 AND u.session_version = $2 AND ${LIVE_ACCOUNT}`,
+      [session.userId, session.v ?? 0],
+    )) ?? null
   );
 }
 

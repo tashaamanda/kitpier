@@ -1,5 +1,6 @@
 import { many, one, pool } from "@/lib/db";
 import { demoConfig } from "@/lib/demo";
+import { isDemoAccount } from "@/lib/demo-account";
 import { route } from "@/lib/http";
 import { requireProjectOwner } from "@/lib/projects";
 import { requireUser } from "@/lib/session";
@@ -29,5 +30,5 @@ export const GET = route(async (_req: Request, ctx: { params: Promise<{ id: stri
     "SELECT 1 FROM provision_jobs WHERE user_id = $1 AND project_id = $2 AND state = 'schema_ready'",
     [user.id, project.id],
   ));
-  return { project, ledger, orders, connections, databaseReady, demo, demoAvailable: !!demoConfig() };
+  return { project, ledger, orders, connections, databaseReady, demo, demoAvailable: !!demoConfig(), demoAccount: isDemoAccount(user.email) };
 });

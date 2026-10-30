@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
+import { LIVE_ACCOUNT } from "./account-expiry";
 import { PRICES } from "./pricecard";
 import { claimBooking, confirmBookingWrite, recordTurnUsage, releaseBooking, reserveTurn, settleTurn } from "./billing";
 import { getCredential } from "./credentials";
@@ -38,7 +39,12 @@ export const WidgetSpec = z.object({
 export type WidgetSpec = z.infer<typeof WidgetSpec>;
 
 export async function getWidget(id: string) {
-  return one<Widget>(pool, "SELECT id, user_id, project_id, business_name, services, timezone FROM widgets WHERE id = $1 AND active", [id]);
+  return one<Widget>(
+    pool,
+    `SELECT w.id, w.user_id, w.project_id, w.business_name, w.services, w.timezone FROM widgets w JOIN users u ON u.id = w.user_id
+     WHERE w.id = $1 AND w.active AND ${LIVE_ACCOUNT}`,
+    [id],
+  );
 }
 
 /** Owner proposes a booking page; the approval gate creates it (pending_action create_widget). */

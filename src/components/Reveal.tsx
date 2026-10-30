@@ -26,9 +26,17 @@ export default function Reveal() {
       },
       { rootMargin: "0px 0px -8% 0px", threshold: 0.08 },
     );
-    const track = (el: Element) => {
+    // This sits in its own Suspense boundary, so it can run before the page's own markup has hydrated. Touching an
+    // element's attributes before then is a hydration mismatch; wait a frame for React to claim it.
+    const hydrated = (el: Element) => Object.keys(el).some((k) => k.startsWith("__reactFiber$"));
+    let frame = 0;
+    const track = (el: Element, tries = 0) => {
       const h = el as HTMLElement;
       if (h.dataset.revealed) return;
+      if (!hydrated(h) && tries < 60) {
+        frame = requestAnimationFrame(() => track(h, tries + 1));
+        return;
+      }
       if (!h.dataset.revealTracked) {
         h.dataset.revealTracked = "1";
         // stagger siblings of the same kind (steps, rows) by their position
@@ -39,7 +47,7 @@ export default function Reveal() {
       if (h.getBoundingClientRect().top < innerHeight * 0.92) h.dataset.revealed = "1"; // already on screen: no flash
       else io.observe(h);
     };
-    document.querySelectorAll(TARGETS).forEach(track);
+    document.querySelectorAll(TARGETS).forEach((el) => track(el));
     root.classList.add("reveal-ready");
     // blocks that mount later (loaded data, new panels) join in
     const mo = new MutationObserver((records) => {
@@ -47,11 +55,12 @@ export default function Reveal() {
         r.addedNodes.forEach((n) => {
           if (!(n instanceof Element)) return;
           if (n.matches(TARGETS)) track(n);
-          n.querySelectorAll(TARGETS).forEach(track);
+          n.querySelectorAll(TARGETS).forEach((el) => track(el));
         });
     });
     mo.observe(document.body, { childList: true, subtree: true });
     return () => {
+      cancelAnimationFrame(frame);
       io.disconnect();
       mo.disconnect();
     };

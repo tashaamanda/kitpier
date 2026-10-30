@@ -20,7 +20,7 @@ type Status = {
 type View = { messages: Msg[]; proposals: Proposal[]; topUps: TopUp[]; status: Status };
 
 const PAUSED: Record<PauseReason, string> = {
-  credits: "your Kitpier credits ran out",
+  credits: "it runs on Kitpier credits. Buy a pack in “Buy credits with PayPal” below to turn it on",
   budget: "this month's project budget is used up",
   daily_limit: "today's spending limit is reached. It resets tomorrow",
   on_hold: "your account is on hold. Please contact Kitpier support",

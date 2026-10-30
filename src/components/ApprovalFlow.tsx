@@ -17,7 +17,7 @@ type Item = {
   details: Record<string, unknown>;
 };
 type Status = { credits_usd: number; supabase_connected: boolean; resend_connected: boolean; demo_connection: boolean };
-type Data = { view: { expired: boolean; items: Item[] }; status: Status; connections: Connection[]; approvedStack: string[]; demoAvailable: boolean };
+type Data = { view: { expired: boolean; items: Item[] }; status: Status; connections: Connection[]; approvedStack: string[]; demoAvailable: boolean; demoAccount: boolean };
 type StackItem = { slug: string; name: string; type: "buy" | "connect" | "soon"; price: string; reason: string };
 
 // One page for everything an agent is waiting on. Each card shows exactly what was proposed; approving checks on the
@@ -206,7 +206,7 @@ export default function ApprovalFlow({ approvalId, projectId, projectName }: { a
       {needsAccounts && (
         <section id="accounts" className="kp-panel kp-panel-active space-y-3">
           <h2>Connect your accounts</h2>
-          <DemoSwitch projectId={projectId} on={status.demo_connection} available={data.demoAvailable} onChange={load} />
+          <DemoSwitch projectId={projectId} on={status.demo_connection} available={data.demoAvailable} locked={data.demoAccount} onChange={load} />
           {!status.demo_connection && (
             <>
               {slugs.includes("supabase") && (

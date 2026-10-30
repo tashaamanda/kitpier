@@ -9,7 +9,20 @@ type Inbox = {
 };
 
 // For judges without Supabase or Resend accounts: one switch instead of two connections.
-export function DemoSwitch({ projectId, on, available, onChange }: { projectId: string; on: boolean; available: boolean; onChange: () => void }) {
+// locked: a "Try the demo" account, which has no own accounts to switch to.
+export function DemoSwitch({
+  projectId,
+  on,
+  available,
+  locked = false,
+  onChange,
+}: {
+  projectId: string;
+  on: boolean;
+  available: boolean;
+  locked?: boolean;
+  onChange: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!available && !on) return null;
@@ -32,11 +45,14 @@ export function DemoSwitch({ projectId, on, available, onChange }: { projectId: 
         <>
           <p>
             <span className="font-semibold">✓ Using the demo connection.</span> Bookings go to Kitpier&apos;s demo database and emails
-            appear in the Demo inbox below instead of being sent. Demo bookings are removed after 48 hours.
+            appear in the Demo inbox below instead of being sent. Demo bookings and emails are deleted after 48 hours, by a daily
+            cleanup (usually within a day after that).
           </p>
-          <button aria-busy={busy} disabled={busy} onClick={() => set(false)} className="text-muted underline">
-            Switch off and use my own accounts
-          </button>
+          {!locked && (
+            <button aria-busy={busy} disabled={busy} onClick={() => set(false)} className="text-muted underline">
+              Switch off and use my own accounts
+            </button>
+          )}
         </>
       ) : (
         <>
@@ -99,5 +115,64 @@ export function DemoInbox({ projectId }: { projectId: string }) {
         </ul>
       </div>
     </section>
+  );
+}
+
+// Demo accounts have no password, so this link is how a judge gets back to the same demo later or on another device.
+// It signs in like a password: it says so, shows when it expires, and can be replaced (which revokes the old one).
+type ResumeLink = { resumeUrl: string; expiresAt: string };
+
+export function DemoResumeLink() {
+  const [link, setLink] = useState<ResumeLink | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api<ResumeLink>("/api/judges/demo").then(setLink, () => {});
+  }, []);
+  if (!link) return null;
+
+  async function copy(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setNote("Link copied. Keep it private.");
+    } catch {
+      window.prompt("Copy your private demo link", url); // clipboard blocked: let them copy it by hand
+    }
+  }
+
+  async function replace() {
+    setBusy(true);
+    try {
+      const next = await api<ResumeLink>("/api/judges/demo", { method: "PUT", body: {} });
+      setLink(next);
+      setNote("New link made. The old one no longer works, and other browsers were signed out of this demo.");
+    } catch (e) {
+      setNote((e as Error).message);
+    }
+    setBusy(false);
+  }
+
+  const until = new Date(link.expiresAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+  return (
+    <div className="grid gap-3 kp-note text-sm">
+      <p>
+        <span className="font-semibold">Coming back later?</span> Copy this demo&apos;s private link. It signs in to this
+        demo like a password, on any device, so keep it to yourself. It works until {until}. The daily cleanup then
+        deletes this demo and its data, usually within a day.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={() => copy(link.resumeUrl)} className="kp-btn-outline kp-btn-xs">
+          Copy private link
+        </button>
+        <button aria-busy={busy} disabled={busy} onClick={replace} className="text-muted underline">
+          Make a new link
+        </button>
+        {note && (
+          <span className="text-muted" role="status">
+            {note}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { HttpError } from "./session";
 
 // Judge demo connection (SPEC §3b). Judges without Supabase or Resend accounts flip one switch:
 // - bookings go to one shared table in Kitpier's demo Supabase project (a judges-only org, never the owner's),
-//   every query scoped to the Kitpier project, rows older than 48 hours removed;
+//   every query scoped to the Kitpier project, rows older than 48 hours removed (daily, by demo-purge.ts);
 // - emails are captured into the project's Demo inbox instead of being delivered.
 
 type Scope = { userId: string; projectId: string };
@@ -43,18 +43,32 @@ export async function setDemo(s: Scope, on: boolean) {
 
 const headers = (key: string) => ({ apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" });
 
-/** Best effort: drop every demo row past its keep time. Runs on each demo booking write. */
-export async function sweepDemoBookings() {
+/**
+ * Drops every demo booking past its keep time. Throws unless Supabase confirmed it, including when the demo settings are
+ * missing, so the daily purge never reports a cleanup that didn't happen.
+ */
+export async function deleteOldDemoBookings() {
   const d = demoConfig();
-  if (!d) return;
+  if (!d) throw new Error("demo bookings cleanup failed (demo Supabase settings missing or invalid)");
   const before = new Date(Date.now() - KEEP_HOURS * 3_600_000).toISOString();
-  await fetch(`${d.url}?created_at=lt.${before}`, { method: "DELETE", headers: headers(d.key), signal: AbortSignal.timeout(5_000) }).catch(() => {});
+  const r = await fetch(`${d.url}?created_at=lt.${before}`, { method: "DELETE", headers: headers(d.key), signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`demo bookings cleanup failed (${r.status})`);
+}
+
+/** Best effort, on each demo booking write. The daily purge (demo-purge.ts) is what guarantees it. */
+export async function sweepDemoBookings() {
+  await deleteOldDemoBookings().catch(() => {});
+}
+
+/** Captured demo emails past the same keep time. */
+export async function deleteOldDemoMail(q: Db = pool) {
+  return (await q.query(`DELETE FROM demo_mail WHERE created_at < now() - interval '${KEEP_HOURS} hours'`)).rowCount ?? 0;
 }
 
 /** Stand-in for Resend on demo projects. The code is readable here on purpose: it's how a judge completes the flow. */
 export async function captureMail(projectId: string, conversationId: string, kind: "code" | "confirmation", to: string, subject: string, body: string) {
   // Same keep time as demo bookings: captured addresses don't outlive the demo.
-  await pool.query(`DELETE FROM demo_mail WHERE created_at < now() - interval '${KEEP_HOURS} hours'`);
+  await deleteOldDemoMail();
   await pool.query(
     "INSERT INTO demo_mail (project_id, conversation_id, kind, to_address, subject, body) VALUES ($1, $2, $3, $4, $5, $6)",
     [projectId, conversationId, kind, to, subject, body],
